@@ -644,6 +644,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b693730cc6aecaf4a98abfa6e2c25d6a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  calibrationOverlay: {fileID: 0}
+  statusText: {fileID: 0}
+  instructionText: {fileID: 0}
+  uiCalibrateButton: {fileID: 0}
   model:
     rot: {fileID: 1909091438}
     a: {fileID: 2072362260}
