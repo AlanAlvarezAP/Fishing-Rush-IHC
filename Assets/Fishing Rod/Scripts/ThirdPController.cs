@@ -57,7 +57,10 @@ public class ThirdPController : MonoBehaviour
     void Start()
     {
         controller = GetComponent<CharacterController>();
-        Cursor.lockState = CursorLockMode.Locked; 
+
+        Cursor.lockState = CursorLockMode.None; 
+        Cursor.visible = true;
+
         cinput = GetComponent<CharacterInputController>();
         animator.SetBool("startFishing", false);
         fishingRod.SetActive(false);
@@ -71,8 +74,8 @@ public class ThirdPController : MonoBehaviour
         // Actualizar el estado para la pantalla de Debug
         if (!isFishing) debugState = "No pescando";
         else if (alreadyCast) debugState = "En el agua";
-        else if (isWiiPreparing) debugState = "¡Latigazo!";
-        else debugState = "Listo (Sube caña)";
+        else if (isWiiPreparing) debugState = "ï¿½Latigazo!";
+        else debugState = "Listo (Sube caï¿½a)";
 
         // --- LECTURA DEL MANDO WII ---
         bool wiiCastTrigger = false;
@@ -96,33 +99,33 @@ public class ThirdPController : MonoBehaviour
                 debugAccelMag = accelMag;
                 debugAccelY = accelY;
 
-                // 1. Detectar si levanta la caña (Y se inclina hacia arriba)
+                // 1. Detectar si levanta la caï¿½a (Y se inclina hacia arriba)
                 if (accelY > 0.4f && !alreadyCast && isFishing && !isWiiPreparing) 
                 {
                     isWiiPreparing = true;
                     peakSwingForce = 0f; 
                 }
 
-                // 2. Lógica de lanzar
+                // 2. Lï¿½gica de lanzar
                 if (isWiiPreparing) 
                 {
-                    // Mientras baja el brazo, capturamos SIEMPRE la fuerza más alta
+                    // Mientras baja el brazo, capturamos SIEMPRE la fuerza mï¿½s alta
                     if (accelMag > peakSwingForce)
                     {
                         peakSwingForce = accelMag;
                     }
 
                     // Lanzamos cuando detectamos el "frenazo" al final del movimiento
-                    // Bajé el límite a 1.5 para que detecte incluso tiros suaves
+                    // Bajï¿½ el lï¿½mite a 1.5 para que detecte incluso tiros suaves
                     if (peakSwingForce > 1.5f && accelMag < 1.3f)
                     {
                         wiiCastTrigger = true;
                         
-                        // --- AQUÍ ESTÁ LA MAGIA DE LA DISTANCIA ---
-                        // 1.5 es un tiro súper suave, 4.5 es un latigazo rompe-telescopios
+                        // --- AQUï¿½ ESTï¿½ LA MAGIA DE LA DISTANCIA ---
+                        // 1.5 es un tiro sï¿½per suave, 4.5 es un latigazo rompe-telescopios
                         float normalizedForce = Mathf.InverseLerp(1.5f, 4.5f, peakSwingForce);
                         
-                        // Hacemos que la curva sea exponencial (un tiro un poco más fuerte se nota MUCHÍSIMO más)
+                        // Hacemos que la curva sea exponencial (un tiro un poco mï¿½s fuerte se nota MUCHï¿½SIMO mï¿½s)
                         normalizedForce = Mathf.Pow(normalizedForce, 1.5f);
                         
                         // RANGO EXTREMO: De 3 (cae a tus pies) a 45 (vuela por los aires)
@@ -195,12 +198,12 @@ public class ThirdPController : MonoBehaviour
             }
         }
 
-        // Lógica de LANZAR
+        // Lï¿½gica de LANZAR
         if ((Input.GetMouseButtonDown(0) || wiiCastTrigger) && isFishing && !alreadyCast && !isReeling) 
         {
             if (Input.GetMouseButtonDown(0)) 
             {
-                debugCalculatedForce = 15f; // Fuerza promedio para ratón
+                debugCalculatedForce = 15f; // Fuerza promedio para ratï¿½n
             }
 
             animator.SetTrigger("cast");
@@ -214,7 +217,7 @@ public class ThirdPController : MonoBehaviour
                     rb.isKinematic = false;
                     rb.velocity = Vector3.zero; 
 
-                    // --- MÁS ARCO DE VUELO ---
+                    // --- Mï¿½S ARCO DE VUELO ---
                     // Ahora la fuerza vertical (hacia arriba) es el 40% de la fuerza total, antes era 33%.
                     Vector3 throwDirection = transform.forward * debugCalculatedForce + Vector3.up * (debugCalculatedForce * 0.40f);
                     rb.AddForce(throwDirection, ForceMode.Impulse);
@@ -259,7 +262,19 @@ public class ThirdPController : MonoBehaviour
             Vector3 direction = new Vector3(horizontal, 0, vertical).normalized;
             if (direction.magnitude >= 0.1f) 
             {
-                float targetAngle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg + camera.eulerAngles.y;
+                //float targetAngle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg + camera.eulerAngles.y;
+                // CÃ“DIGO ADAPTADO PARA RED/VR:
+                float cameraYaw = camera != null ? camera.eulerAngles.y : 0f;
+
+                // Si existe PlayerNetwork, usamos la mirada VR enviada por el celular
+                PlayerNetwork playerNet = GetComponent<PlayerNetwork>();
+                if (playerNet != null)
+                {
+                    cameraYaw = playerNet.ClientCameraYaw;
+                }
+
+                float targetAngle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg + cameraYaw;
+
                 float angle = Mathf.SmoothDampAngle(transform.eulerAngles.y, targetAngle, ref turnSmoothingVelocity, turnSmoothingTime);
                 transform.rotation = Quaternion.Euler(0f, angle, 0f);
 
@@ -304,7 +319,7 @@ public class ThirdPController : MonoBehaviour
         playerVelocity.y += Mathf.Sqrt(jumpHeight * jumpAdjustment * gravityFactor * gravity);
     }
 
-    // --- INTERFAZ DE DEPURACIÓN EN PANTALLA ---
+    // --- INTERFAZ DE DEPURACIï¿½N EN PANTALLA ---
     void OnGUI()
     {
         GUIStyle style = new GUIStyle();
@@ -325,7 +340,7 @@ public class ThirdPController : MonoBehaviour
         GUILayout.Label("Estado: " + debugState, style);
         GUILayout.Label("Fuerza Act: " + debugAccelMag.ToString("F2"), style);
         GUILayout.Label("Fuerza MAX: " + peakSwingForce.ToString("F2"), style);
-        GUILayout.Label("Inclinación: " + debugAccelY.ToString("F2"), style);
+        GUILayout.Label("Inclinaciï¿½n: " + debugAccelY.ToString("F2"), style);
         
         style.normal.textColor = Color.green;
         GUILayout.Label("Potencia: " + debugCalculatedForce.ToString("F1"), style);
