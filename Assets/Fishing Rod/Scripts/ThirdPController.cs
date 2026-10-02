@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
-using WiimoteApi; 
+using WiimoteApi;
 
 public class ThirdPController : MonoBehaviour
 {
@@ -36,31 +36,28 @@ public class ThirdPController : MonoBehaviour
 
     // fishing objects
     public GameObject fishingRod;
-    [SerializeField] private GameObject lineObject; 
-    [SerializeField] private GameObject hookObject; 
+    [SerializeField] private GameObject lineObject;
+    [SerializeField] private GameObject hookObject;
     [SerializeField] private Transform rodTip;
     [SerializeField] private Collider hookCollider;
 
     // Variables para el mando
     private bool isWiiPreparing = false;
-    private float peakSwingForce = 0f; 
+    private float peakSwingForce = 0f;
     private bool wasWiiB = false;
     private bool wasWiiA = false;
     private bool wasWiiPlus = false;
-    
+
     // Variables de DEBUG para imprimir en pantalla
     private float debugAccelMag = 0f;
     private float debugAccelY = 0f;
-    private float debugCalculatedForce = 12f; 
+    private float debugCalculatedForce = 12f;
     private string debugState = "Iniciando...";
 
     void Start()
     {
         controller = GetComponent<CharacterController>();
-
-        Cursor.lockState = CursorLockMode.None; 
-        Cursor.visible = true;
-
+        Cursor.lockState = CursorLockMode.Locked;
         cinput = GetComponent<CharacterInputController>();
         animator.SetBool("startFishing", false);
         fishingRod.SetActive(false);
@@ -74,8 +71,8 @@ public class ThirdPController : MonoBehaviour
         // Actualizar el estado para la pantalla de Debug
         if (!isFishing) debugState = "No pescando";
         else if (alreadyCast) debugState = "En el agua";
-        else if (isWiiPreparing) debugState = "�Latigazo!";
-        else debugState = "Listo (Sube ca�a)";
+        else if (isWiiPreparing) debugState = "¡Latigazo!";
+        else debugState = "Listo (Sube caña)";
 
         // --- LECTURA DEL MANDO WII ---
         bool wiiCastTrigger = false;
@@ -95,45 +92,45 @@ public class ThirdPController : MonoBehaviour
             {
                 float accelMag = new Vector3(accel[0], accel[1], accel[2]).magnitude;
                 float accelY = accel[1];
-                
+
                 debugAccelMag = accelMag;
                 debugAccelY = accelY;
 
-                // 1. Detectar si levanta la ca�a (Y se inclina hacia arriba)
-                if (accelY > 0.4f && !alreadyCast && isFishing && !isWiiPreparing) 
+                // 1. Detectar si levanta la caña (Y se inclina hacia arriba)
+                if (accelY > 0.4f && !alreadyCast && isFishing && !isWiiPreparing)
                 {
                     isWiiPreparing = true;
-                    peakSwingForce = 0f; 
+                    peakSwingForce = 0f;
                 }
 
-                // 2. L�gica de lanzar
-                if (isWiiPreparing) 
+                // 2. Lógica de lanzar
+                if (isWiiPreparing)
                 {
-                    // Mientras baja el brazo, capturamos SIEMPRE la fuerza m�s alta
+                    // Mientras baja el brazo, capturamos SIEMPRE la fuerza más alta
                     if (accelMag > peakSwingForce)
                     {
                         peakSwingForce = accelMag;
                     }
 
                     // Lanzamos cuando detectamos el "frenazo" al final del movimiento
-                    // Baj� el l�mite a 1.5 para que detecte incluso tiros suaves
+                    // Bajé el límite a 1.5 para que detecte incluso tiros suaves
                     if (peakSwingForce > 1.5f && accelMag < 1.3f)
                     {
                         wiiCastTrigger = true;
-                        
-                        // --- AQU� EST� LA MAGIA DE LA DISTANCIA ---
-                        // 1.5 es un tiro s�per suave, 4.5 es un latigazo rompe-telescopios
+
+                        // --- AQUÍ ESTÁ LA MAGIA DE LA DISTANCIA ---
+                        // 1.5 es un tiro súper suave, 4.5 es un latigazo rompe-telescopios
                         float normalizedForce = Mathf.InverseLerp(1.5f, 4.5f, peakSwingForce);
-                        
-                        // Hacemos que la curva sea exponencial (un tiro un poco m�s fuerte se nota MUCH�SIMO m�s)
+
+                        // Hacemos que la curva sea exponencial (un tiro un poco más fuerte se nota MUCHÍSIMO más)
                         normalizedForce = Mathf.Pow(normalizedForce, 1.5f);
-                        
+
                         // RANGO EXTREMO: De 3 (cae a tus pies) a 45 (vuela por los aires)
                         debugCalculatedForce = Mathf.Lerp(3f, 45f, normalizedForce);
-                        
-                        isWiiPreparing = false; 
+
+                        isWiiPreparing = false;
                     }
-                    else if (peakSwingForce < 1.5f && accelY < 0.1f) 
+                    else if (peakSwingForce < 1.5f && accelY < 0.1f)
                     {
                         isWiiPreparing = false; // Cancelado por bajarlo muy despacito
                     }
@@ -167,8 +164,8 @@ public class ThirdPController : MonoBehaviour
             playerVelocity.x = 0f;
             playerVelocity.z = 0f;
         }
-        
-        if (Input.GetKeyDown(KeyCode.E) || wiiEquipTrigger) 
+
+        if (Input.GetKeyDown(KeyCode.E) || wiiEquipTrigger)
         {
             if (!isFishing)
             {
@@ -198,12 +195,12 @@ public class ThirdPController : MonoBehaviour
             }
         }
 
-        // L�gica de LANZAR
-        if ((Input.GetMouseButtonDown(0) || wiiCastTrigger) && isFishing && !alreadyCast && !isReeling) 
+        // Lógica de LANZAR
+        if ((Input.GetMouseButtonDown(0) || wiiCastTrigger) && isFishing && !alreadyCast && !isReeling)
         {
-            if (Input.GetMouseButtonDown(0)) 
+            if (Input.GetMouseButtonDown(0))
             {
-                debugCalculatedForce = 15f; // Fuerza promedio para rat�n
+                debugCalculatedForce = 15f; // Fuerza promedio para ratón
             }
 
             animator.SetTrigger("cast");
@@ -215,9 +212,9 @@ public class ThirdPController : MonoBehaviour
                 if (rb != null)
                 {
                     rb.isKinematic = false;
-                    rb.velocity = Vector3.zero; 
+                    rb.velocity = Vector3.zero;
 
-                    // --- M�S ARCO DE VUELO ---
+                    // --- MÁS ARCO DE VUELO ---
                     // Ahora la fuerza vertical (hacia arriba) es el 40% de la fuerza total, antes era 33%.
                     Vector3 throwDirection = transform.forward * debugCalculatedForce + Vector3.up * (debugCalculatedForce * 0.40f);
                     rb.AddForce(throwDirection, ForceMode.Impulse);
@@ -225,7 +222,7 @@ public class ThirdPController : MonoBehaviour
             }
         }
 
-        if ((Input.GetKeyDown(KeyCode.Q) || wiiReelTrigger) && isFishing && alreadyCast && !isReeling) 
+        if ((Input.GetKeyDown(KeyCode.Q) || wiiReelTrigger) && isFishing && alreadyCast && !isReeling)
         {
             animator.SetTrigger("reel");
             isReeling = true;
@@ -260,21 +257,9 @@ public class ThirdPController : MonoBehaviour
             targetVelY = Mathf.Clamp01(new Vector2(horizontal, vertical).magnitude);
 
             Vector3 direction = new Vector3(horizontal, 0, vertical).normalized;
-            if (direction.magnitude >= 0.1f) 
+            if (direction.magnitude >= 0.1f)
             {
-                //float targetAngle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg + camera.eulerAngles.y;
-                // CÓDIGO ADAPTADO PARA RED/VR:
-                float cameraYaw = camera != null ? camera.eulerAngles.y : 0f;
-
-                // Si existe PlayerNetwork, usamos la mirada VR enviada por el celular
-                PlayerNetwork playerNet = GetComponent<PlayerNetwork>();
-                if (playerNet != null)
-                {
-                    cameraYaw = playerNet.ClientCameraYaw;
-                }
-
-                float targetAngle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg + cameraYaw;
-
+                float targetAngle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg + camera.eulerAngles.y;
                 float angle = Mathf.SmoothDampAngle(transform.eulerAngles.y, targetAngle, ref turnSmoothingVelocity, turnSmoothingTime);
                 transform.rotation = Quaternion.Euler(0f, angle, 0f);
 
@@ -305,10 +290,10 @@ public class ThirdPController : MonoBehaviour
                     if (Input.GetButtonDown("Jump") || wiiJumpDown) Jump();
                 }
             }
-            
+
             currentVelY = Mathf.Lerp(currentVelY, targetVelY, speedChangeRate);
             animator.SetFloat("velY", currentVelY);
-            
+
             playerVelocity.y += gravityFactor * gravity * Time.deltaTime;
             controller.Move(playerVelocity * Time.deltaTime);
         }
@@ -319,11 +304,11 @@ public class ThirdPController : MonoBehaviour
         playerVelocity.y += Mathf.Sqrt(jumpHeight * jumpAdjustment * gravityFactor * gravity);
     }
 
-    // --- INTERFAZ DE DEPURACI�N EN PANTALLA ---
+    // --- INTERFAZ DE DEPURACIÓN EN PANTALLA ---
     void OnGUI()
     {
         GUIStyle style = new GUIStyle();
-        style.fontSize = 12; 
+        style.fontSize = 12;
         style.normal.textColor = Color.yellow;
         style.fontStyle = FontStyle.Bold;
 
@@ -333,18 +318,18 @@ public class ThirdPController : MonoBehaviour
         float posY = Screen.height - boxHeight - 10f;
 
         GUI.Box(new Rect(posX, posY, boxWidth, boxHeight), "");
-        GUI.Box(new Rect(posX, posY, boxWidth, boxHeight), ""); 
+        GUI.Box(new Rect(posX, posY, boxWidth, boxHeight), "");
 
         GUILayout.BeginArea(new Rect(posX + 10, posY + 10, boxWidth - 20, boxHeight - 20));
         GUILayout.Label("- DEBUG WII -", style);
         GUILayout.Label("Estado: " + debugState, style);
         GUILayout.Label("Fuerza Act: " + debugAccelMag.ToString("F2"), style);
         GUILayout.Label("Fuerza MAX: " + peakSwingForce.ToString("F2"), style);
-        GUILayout.Label("Inclinaci�n: " + debugAccelY.ToString("F2"), style);
-        
+        GUILayout.Label("Inclinación: " + debugAccelY.ToString("F2"), style);
+
         style.normal.textColor = Color.green;
         GUILayout.Label("Potencia: " + debugCalculatedForce.ToString("F1"), style);
-        
+
         GUILayout.EndArea();
     }
 }
