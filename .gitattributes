@@ -170,17 +170,14 @@ Packages/packages-lock.json linguist-generated
 # Exceptions for .asset files such as lightning pre-baking
 LightingData.asset     binary
 
-
-# text files
+# auto detect text files
 * text=auto
 
-# main code
-*.cs text diff=csharp
-*.cginc text
-*.shader text
-
-# unity files eol
+# text files of unity
+*.cs text eol=lf
 *.cginc text eol=lf
+*.shader text eol=lf
+*.compute text eol=lf
 *.mat text eol=lf
 *.anim text eol=lf
 *.unity text eol=lf
@@ -190,6 +187,23 @@ LightingData.asset     binary
 *.asset text eol=lf
 *.meta text eol=lf
 *.controller text eol=lf
+*.json text eol=lf
+*.wlt text eol=lf
+*.conf text eol=lf
 
-# assets as binary
-# *.asset binary
+# binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.tga binary
+*.psd binary
+*.exr binary
+*.fbx binary
+*.obj binary
+*.blend binary
+*.wav binary
+*.mp3 binary
+*.ogg binary
+*.dll binary
+*.so binary
+*.zip binary
