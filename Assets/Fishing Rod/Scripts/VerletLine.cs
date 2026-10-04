@@ -1,30 +1,24 @@
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-// Inspiration from https://www.reddit.com/r/Unity3D/comments/1kx1hp/best_way_to_do_fishing_line/
 public class VerletLine : MonoBehaviour
 {
     public Transform StartPoint;
     public Transform EndPoint;
-    public int Segments = 10;
+    public int Segments = 12;
     public LineRenderer lineRenderer;
-    public float SegmentLength = 0.03f;
-    public float startSegmentLength = 0.03f;
-    public float currentTargetLength = 0.03f;
-    public float maxSegmentLength = 1f;
+
+    [Header("Configuración de Cuerda")]
+    public float minTotalLength = 0.5f;
+    public float currentTotalLength = 0.5f;
+    public float targetTotalLength = 0.5f;
+    public float maxTotalLength = 50.0f;
     public Vector3 Gravity = new Vector3(0, -9.81f, 0);
 
-    // Num of Physics iterations
-    public int Iterations = 6;
-    // higher is stiffer, lower is stretchier
-    public float tensionConstant = 10f;
-    public bool SecondHasRigidbody = false;
-    public float LerpSpeed = 5.0f; // Aumentado un poco para que reaccione más rápido al recoger
-    public float Delay = 0.1f; // Reducido para que no tarde 3 segundos en reaccionar al lanzar
-    private bool isChangingLength = false;
+    [Header("Físicas Verlet")]
+    public int Iterations = 8;
+    public float LerpSpeed = 12.0f;
 
-    // Represents a segment of the line.
     private class LineParticle
     {
         public Vector3 Pos;
@@ -36,92 +30,91 @@ public class VerletLine : MonoBehaviour
 
     void Start()
     {
+        currentTotalLength = minTotalLength;
+        targetTotalLength = minTotalLength;
+        InitParticles();
+    }
+
+    public void InitParticles()
+    {
+        if (StartPoint == null || EndPoint == null) return;
+
         particles = new List<LineParticle>();
+
+        // Evita distancia cero exacta para no romper el solver
+        Vector3 start = StartPoint.position;
+        Vector3 end = EndPoint.position;
+        if (Vector3.Distance(start, end) < 0.01f)
+        {
+            end += StartPoint.forward * 0.1f;
+        }
+
         for (int i = 0; i < Segments; i++)
         {
-            Vector3 point = Vector3.Lerp(StartPoint.position, EndPoint.position, i / (float)(Segments - 1));
+            Vector3 point = Vector3.Lerp(start, end, i / (float)(Segments - 1));
             particles.Add(new LineParticle { Pos = point, OldPos = point, Acceleration = Gravity });
         }
-        lineRenderer.positionCount = particles.Count;
+
+        if (lineRenderer != null)
+        {
+            lineRenderer.positionCount = particles.Count;
+            lineRenderer.useWorldSpace = true; // Asegura espacio global
+        }
     }
 
     void Update()
     {
-        // Detectar cuando lanzas (clic izquierdo)
-        if (Input.GetMouseButtonDown(0))
-        {
-            StartCoroutine(IncreaseLengthAfterDelay(Delay));
-        }
-        else if (Input.GetKeyDown(KeyCode.Q))
-        {
-            // Reel In (Recoger)
-            currentTargetLength = startSegmentLength;
-            isChangingLength = true;
-        }
+        // Interpola longitud objetivo
+        currentTotalLength = Mathf.Lerp(currentTotalLength, targetTotalLength, LerpSpeed * Time.deltaTime);
 
-        if (isChangingLength)
+        // PREVENCIÓN DE EXPLOSIÓN: La cuerda jamás puede ser más corta que la distancia real entre extremos
+        if (StartPoint != null && EndPoint != null)
         {
-            SegmentLength = Mathf.Lerp(SegmentLength, currentTargetLength, LerpSpeed * Time.deltaTime);
-
-            // Stop changing the line length when it's close enough to the min/max
-            if (Mathf.Abs(SegmentLength - currentTargetLength) < 0.01f)
+            float realDistance = Vector3.Distance(StartPoint.position, EndPoint.position);
+            if (currentTotalLength < realDistance)
             {
-                SegmentLength = currentTargetLength;
-                isChangingLength = false;
+                currentTotalLength = realDistance;
             }
         }
     }
 
-    private IEnumerator IncreaseLengthAfterDelay(float delay)
-    {
-        yield return new WaitForSeconds(delay);
-
-        // --- CAMBIO CLAVE EN EL CÓDIGO ---
-        if (StartPoint != null && EndPoint != null)
-        {
-            // Medimos la distancia actual entre la caña y el anzuelo
-            float distance = Vector3.Distance(StartPoint.position, EndPoint.position);
-
-            // Forzamos matemáticamente que el segmento máximo sea mucho mayor 
-            // que la distancia directa, dándole ese "slack" (holgura) para que caiga hondo.
-            maxSegmentLength = Mathf.Max(5.0f, (distance / Segments) * 100.0f);
-        }
-
-        // Forzamos a que salte al máximo al instante
-        SegmentLength = maxSegmentLength;
-        currentTargetLength = maxSegmentLength;
-        isChangingLength = true;
-    }
-
-    // Update the line with Verlet Physics.
     void FixedUpdate()
     {
-        if (StartPoint == null || EndPoint == null) return;
+        if (StartPoint == null || EndPoint == null || particles == null || particles.Count == 0) return;
 
+        float dt = Time.fixedDeltaTime;
         foreach (var p in particles)
         {
-            Verlet(p, Time.fixedDeltaTime);
+            Verlet(p, dt);
         }
+
+        // Calcula la distancia requerida por cada segmento
+        float segLength = currentTotalLength / Mathf.Max(1, Segments - 1);
 
         for (int i = 0; i < Iterations; i++)
         {
             for (int j = 0; j < particles.Count - 1; j++)
             {
-                PoleConstraint(particles[j], particles[j + 1], SegmentLength);
+                PoleConstraint(particles[j], particles[j + 1], segLength);
             }
         }
 
+        // Fijar extremos exactamente en la caña y el anzuelo
         particles[0].Pos = StartPoint.position;
+        particles[particles.Count - 1].Pos = EndPoint.position;
+    }
 
-        if (SecondHasRigidbody)
-        {
-            Vector3 force = (particles[particles.Count - 1].Pos - EndPoint.position) * tensionConstant;
-            EndPoint.GetComponent<Rigidbody>().AddForce(force);
-        }
+    // Renderizado en LateUpdate para sincronizar perfectamente con animaciones y transform
+    void LateUpdate()
+    {
+        if (lineRenderer == null || particles == null || particles.Count == 0) return;
+        if (StartPoint == null || EndPoint == null) return;
 
+        // Asegurar que los extremos estén pegados en el render de este frame
+        particles[0].Pos = StartPoint.position;
         particles[particles.Count - 1].Pos = EndPoint.position;
 
-        var positions = new Vector3[particles.Count];
+        Vector3[] positions = new Vector3[particles.Count];
         for (int i = 0; i < particles.Count; i++)
         {
             positions[i] = particles[i].Pos;
@@ -129,15 +122,31 @@ public class VerletLine : MonoBehaviour
         lineRenderer.SetPositions(positions);
     }
 
-    // Performs Verlet integration to update the position of a particle.
+    public void SetTargetLength(float length)
+    {
+        targetTotalLength = Mathf.Clamp(length, minTotalLength, maxTotalLength);
+    }
+
+    public void SnapToLength(float length)
+    {
+        targetTotalLength = Mathf.Clamp(length, minTotalLength, maxTotalLength);
+        currentTotalLength = targetTotalLength;
+    }
+
+    public void ResetRope()
+    {
+        targetTotalLength = minTotalLength;
+        currentTotalLength = minTotalLength;
+        InitParticles();
+    }
+
     private void Verlet(LineParticle p, float dt)
     {
         var temp = p.Pos;
-        p.Pos += p.Pos - p.OldPos + (p.Acceleration * dt * dt);
+        p.Pos += (p.Pos - p.OldPos) + (p.Acceleration * dt * dt);
         p.OldPos = temp;
     }
 
-    // Applies a pole constraint to a pair of particles.
     private void PoleConstraint(LineParticle p1, LineParticle p2, float restLength)
     {
         var delta = p2.Pos - p1.Pos;
@@ -149,5 +158,4 @@ public class VerletLine : MonoBehaviour
         p1.Pos += delta * diff * 0.5f;
         p2.Pos -= delta * diff * 0.5f;
     }
-
 }

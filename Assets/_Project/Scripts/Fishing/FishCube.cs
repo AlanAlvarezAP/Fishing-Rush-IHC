@@ -20,19 +20,65 @@ public class FishCube : MonoBehaviour
                 return;
             }
         }
-
-        if (isHooked && targetHook != null && playerTransform != null)
+        // Si ya está enganchado, hacemos que siga al anzuelo manualmente cada frame
+        else if (targetHook != null)
         {
-            float distanceToPlayer = Vector3.Distance(transform.position, playerTransform.position);
+            // Mantiene la posición exactamente en el anzuelo sin heredar rotaciones locas
+            transform.position = targetHook.position;
+            transform.rotation = Quaternion.identity; // Opcional: fija la rotación recta
 
-            if (distanceToPlayer < 2.0f)
+            // Comprobamos la distancia al jugador para sumar el punto
+            if (playerTransform != null)
             {
-                if (FishingCounterManager.Instance != null)
+                float distanceToPlayer = Vector3.Distance(transform.position, playerTransform.position);
+
+                if (distanceToPlayer < 2.0f)
                 {
-                    FishingCounterManager.Instance.AddFish();
+                    if (FishingCounterManager.Instance != null)
+                    {
+                        FishingCounterManager.Instance.AddFish();
+                    }
+                    Destroy(gameObject);
                 }
-                Destroy(gameObject);
             }
+        }
+    }
+
+    private void OnCollisionEnter(Collision collision)
+    {
+        if (isHooked) return;
+
+        if (collision.gameObject.CompareTag("Hook") || collision.gameObject.name.Contains("Hook"))
+        {
+            Transform hookTransform = collision.transform;
+
+            Transform playerTr = null;
+            ThirdPController playerController = FindObjectOfType<ThirdPController>();
+            if (playerController != null)
+            {
+                playerTr = playerController.transform;
+            }
+
+            HookMe(hookTransform, playerTr);
+        }
+    }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        if (isHooked) return;
+
+        if (other.CompareTag("Hook") || other.name.Contains("Hook"))
+        {
+            Transform hookTransform = other.transform;
+
+            Transform playerTr = null;
+            ThirdPController playerController = FindObjectOfType<ThirdPController>();
+            if (playerController != null)
+            {
+                playerTr = playerController.transform;
+            }
+
+            HookMe(hookTransform, playerTr);
         }
     }
 
@@ -47,10 +93,11 @@ public class FishCube : MonoBehaviour
         Rigidbody rb = GetComponent<Rigidbody>();
         if (rb != null)
         {
+            // Desactivamos la gravedad y las físicas del pez para que no pelee con el anzuelo
             rb.isKinematic = true;
+            rb.detectCollisions = false; // Evita colisiones fantasma mientras está atrapado
         }
 
-        transform.SetParent(hook);
-        transform.localPosition = Vector3.zero;
+        // ELIMINADO: Ya no usamos SetParent para evitar que herede giros erráticos
     }
 }
