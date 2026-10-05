@@ -5,17 +5,18 @@ TagManager:
   serializedVersion: 2
   tags:
   - Ground
+  - Fish
   layers:
   - Default
   - TransparentFX
   - Ignore Raycast
-  - 
+  - Interactive
   - Water
   - UI
   - 
-  - Ground
-  - Player
-  - WiiOverlay
+  - 
+  - 
+  - 
   - 
   - 
   - 

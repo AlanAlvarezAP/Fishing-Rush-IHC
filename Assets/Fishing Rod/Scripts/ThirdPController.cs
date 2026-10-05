@@ -1,8 +1,12 @@
 using System.Collections.Generic;
 using UnityEngine;
-using WiimoteApi; 
+using Unity.Netcode;
 
-public class ThirdPController : MonoBehaviour
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR
+using WiimoteApi;
+#endif
+
+public class ThirdPController : NetworkBehaviour
 {
     public CharacterController controller;
     public new Transform camera;
@@ -36,45 +40,82 @@ public class ThirdPController : MonoBehaviour
 
     // fishing objects
     public GameObject fishingRod;
-    [SerializeField] private GameObject lineObject; 
-    [SerializeField] private GameObject hookObject; 
+    [SerializeField] private GameObject lineObject;
+    [SerializeField] private GameObject hookObject;
     [SerializeField] private Transform rodTip;
     [SerializeField] private Collider hookCollider;
 
     // Variables para el mando
     private bool isWiiPreparing = false;
-    private float peakSwingForce = 0f; 
+    private float peakSwingForce = 0f;
     private bool wasWiiB = false;
     private bool wasWiiA = false;
     private bool wasWiiPlus = false;
-    
+
     // Variables de DEBUG para imprimir en pantalla
     private float debugAccelMag = 0f;
     private float debugAccelY = 0f;
-    private float debugCalculatedForce = 12f; 
+    private float debugCalculatedForce = 12f;
     private string debugState = "Iniciando...";
 
     void Start()
     {
         controller = GetComponent<CharacterController>();
-        Cursor.lockState = CursorLockMode.Locked; 
+        cinput = GetComponent<CharacterInputController>();
+
+        if (animator != null) animator.SetBool("startFishing", false);
+        if (fishingRod != null) fishingRod.SetActive(false);
+
+        if (lineObject != null) lineObject.SetActive(false);
+        if (hookObject != null) hookObject.SetActive(false);
+
+        if (camera == null && Camera.main != null)
+            camera = Camera.main.transform;
+
+        /*
+        controller = GetComponent<CharacterController>();
+        Cursor.lockState = CursorLockMode.Locked;
         cinput = GetComponent<CharacterInputController>();
         animator.SetBool("startFishing", false);
         fishingRod.SetActive(false);
 
         if (lineObject != null) lineObject.SetActive(false);
         if (hookObject != null) hookObject.SetActive(false);
+        */
+    }
+
+    public override void OnNetworkSpawn()
+    {
+        if (IsOwner)
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
     }
 
     void Update()
     {
-        // Actualizar el estado para la pantalla de Debug
+        if (!IsOwner) return;
+
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            if (Cursor.lockState == CursorLockMode.Locked)
+            {
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+            }
+            else
+            {
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
+            }
+        }
+
         if (!isFishing) debugState = "No pescando";
         else if (alreadyCast) debugState = "En el agua";
-        else if (isWiiPreparing) debugState = "¡Latigazo!";
-        else debugState = "Listo (Sube caña)";
+        else if (isWiiPreparing) debugState = "Â¡Latigazo!";
+        else debugState = "Listo (Sube caÃ±a)";
 
-        // --- LECTURA DEL MANDO WII ---
         bool wiiCastTrigger = false;
         bool wiiReelTrigger = false;
         bool wiiEquipTrigger = false;
@@ -83,6 +124,7 @@ public class ThirdPController : MonoBehaviour
         float wiiHorizontal = 0f;
         float wiiVertical = 0f;
 
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR
         if (WiimoteManager.HasWiimote() && WiimoteManager.Wiimotes.Count > 0)
         {
             Wiimote wiimote = WiimoteManager.Wiimotes[0];
@@ -92,45 +134,30 @@ public class ThirdPController : MonoBehaviour
             {
                 float accelMag = new Vector3(accel[0], accel[1], accel[2]).magnitude;
                 float accelY = accel[1];
-                
+
                 debugAccelMag = accelMag;
                 debugAccelY = accelY;
 
-                // 1. Detectar si levanta la caña (Y se inclina hacia arriba)
-                if (accelY > 0.4f && !alreadyCast && isFishing && !isWiiPreparing) 
+                if (accelY > 0.4f && !alreadyCast && isFishing && !isWiiPreparing)
                 {
                     isWiiPreparing = true;
-                    peakSwingForce = 0f; 
+                    peakSwingForce = 0f;
                 }
 
-                // 2. Lógica de lanzar
-                if (isWiiPreparing) 
+                if (isWiiPreparing)
                 {
-                    // Mientras baja el brazo, capturamos SIEMPRE la fuerza más alta
                     if (accelMag > peakSwingForce)
-                    {
                         peakSwingForce = accelMag;
-                    }
 
-                    // Lanzamos cuando detectamos el "frenazo" al final del movimiento
-                    // Bajé el límite a 1.5 para que detecte incluso tiros suaves
                     if (peakSwingForce > 1.5f && accelMag < 1.3f)
                     {
                         wiiCastTrigger = true;
-                        
-                        // --- AQUÍ ESTÁ LA MAGIA DE LA DISTANCIA ---
-                        // 1.5 es un tiro súper suave, 4.5 es un latigazo rompe-telescopios
                         float normalizedForce = Mathf.InverseLerp(1.5f, 4.5f, peakSwingForce);
-                        
-                        // Hacemos que la curva sea exponencial (un tiro un poco más fuerte se nota MUCHÍSIMO más)
                         normalizedForce = Mathf.Pow(normalizedForce, 1.5f);
-                        
-                        // RANGO EXTREMO: De 3 (cae a tus pies) a 45 (vuela por los aires)
                         debugCalculatedForce = Mathf.Lerp(3f, 45f, normalizedForce);
-                        
-                        isWiiPreparing = false; 
+                        isWiiPreparing = false;
                     }
-                    else if (peakSwingForce < 1.5f && accelY < 0.1f) 
+                    else if (peakSwingForce < 1.5f && accelY < 0.1f)
                     {
                         isWiiPreparing = false; // Cancelado por bajarlo muy despacito
                     }
@@ -155,55 +182,55 @@ public class ThirdPController : MonoBehaviour
             if (wiimote.Button.d_left) wiiHorizontal = -1f;
             if (wiimote.Button.d_right) wiiHorizontal = 1f;
         }
-        // -----------------------------
+#endif
 
         if (controller.isGrounded && playerVelocity.y < 0)
         {
-            animator.SetBool("isGrounded", true);
+            if (animator != null) animator.SetBool("isGrounded", true);
             playerVelocity.y = 0f;
             playerVelocity.x = 0f;
             playerVelocity.z = 0f;
         }
-        
-        if (Input.GetKeyDown(KeyCode.E) || wiiEquipTrigger) 
+
+        if (Input.GetKeyDown(KeyCode.E) || wiiEquipTrigger)
         {
             if (!isFishing)
             {
-                animator.SetBool("startFishing", true);
+                if (animator != null) animator.SetBool("startFishing", true);
                 isFishing = true;
 
                 currentVelY = 0f;
                 targetVelY = 0f;
-                animator.SetFloat("velY", 0f);
+                if (animator != null) animator.SetFloat("velY", 0f);
 
                 if (hookObject != null && rodTip != null)
                 {
                     hookObject.transform.position = rodTip.position;
                 }
 
-                fishingRod.SetActive(true);
+                if (fishingRod != null) fishingRod.SetActive(true);
                 if (lineObject != null) lineObject.SetActive(true);
                 if (hookObject != null) hookObject.SetActive(true);
             }
             else if (isFishing && !alreadyCast && !isReeling)
             {
-                animator.SetBool("startFishing", false);
+                if (animator != null) animator.SetBool("startFishing", false);
                 isFishing = false;
-                fishingRod.SetActive(false);
+                if (fishingRod != null) fishingRod.SetActive(false);
                 if (lineObject != null) lineObject.SetActive(false);
                 if (hookObject != null) hookObject.SetActive(false);
             }
         }
 
-        // Lógica de LANZAR
-        if ((Input.GetMouseButtonDown(0) || wiiCastTrigger) && isFishing && !alreadyCast && !isReeling) 
+        // LÃ³gica de LANZAR
+        if ((Input.GetMouseButtonDown(0) || wiiCastTrigger) && isFishing && !alreadyCast && !isReeling)
         {
-            if (Input.GetMouseButtonDown(0)) 
+            if (Input.GetMouseButtonDown(0))
             {
-                debugCalculatedForce = 15f; // Fuerza promedio para ratón
+                debugCalculatedForce = 15f; // Fuerza promedio para ratÃ³n
             }
 
-            animator.SetTrigger("cast");
+            if (animator != null) animator.SetTrigger("cast");
             alreadyCast = true;
 
             if (hookObject != null)
@@ -212,9 +239,9 @@ public class ThirdPController : MonoBehaviour
                 if (rb != null)
                 {
                     rb.isKinematic = false;
-                    rb.velocity = Vector3.zero; 
+                    rb.velocity = Vector3.zero;
 
-                    // --- MÁS ARCO DE VUELO ---
+                    // --- MÃS ARCO DE VUELO ---
                     // Ahora la fuerza vertical (hacia arriba) es el 40% de la fuerza total, antes era 33%.
                     Vector3 throwDirection = transform.forward * debugCalculatedForce + Vector3.up * (debugCalculatedForce * 0.40f);
                     rb.AddForce(throwDirection, ForceMode.Impulse);
@@ -222,9 +249,9 @@ public class ThirdPController : MonoBehaviour
             }
         }
 
-        if ((Input.GetKeyDown(KeyCode.Q) || wiiReelTrigger) && isFishing && alreadyCast && !isReeling) 
+        if ((Input.GetKeyDown(KeyCode.Q) || wiiReelTrigger) && isFishing && alreadyCast && !isReeling)
         {
-            animator.SetTrigger("reel");
+            if (animator != null) animator.SetTrigger("reel");
             isReeling = true;
             if (hookCollider != null)
             {
@@ -232,7 +259,7 @@ public class ThirdPController : MonoBehaviour
             }
         }
 
-        if (isReeling)
+        if (isReeling && animator != null)
         {
             AnimatorStateInfo stateInfo = animator.GetCurrentAnimatorStateInfo(0);
             if (!stateInfo.IsName("Reel In"))
@@ -257,7 +284,7 @@ public class ThirdPController : MonoBehaviour
             targetVelY = Mathf.Clamp01(new Vector2(horizontal, vertical).magnitude);
 
             Vector3 direction = new Vector3(horizontal, 0, vertical).normalized;
-            if (direction.magnitude >= 0.1f) 
+            if (direction.magnitude >= 0.1f && camera != null)
             {
                 float targetAngle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg + camera.eulerAngles.y;
                 float angle = Mathf.SmoothDampAngle(transform.eulerAngles.y, targetAngle, ref turnSmoothingVelocity, turnSmoothingTime);
@@ -290,10 +317,10 @@ public class ThirdPController : MonoBehaviour
                     if (Input.GetButtonDown("Jump") || wiiJumpDown) Jump();
                 }
             }
-            
+
             currentVelY = Mathf.Lerp(currentVelY, targetVelY, speedChangeRate);
-            animator.SetFloat("velY", currentVelY);
-            
+            if (animator != null) animator.SetFloat("velY", currentVelY);
+
             playerVelocity.y += gravityFactor * gravity * Time.deltaTime;
             controller.Move(playerVelocity * Time.deltaTime);
         }
@@ -304,11 +331,16 @@ public class ThirdPController : MonoBehaviour
         playerVelocity.y += Mathf.Sqrt(jumpHeight * jumpAdjustment * gravityFactor * gravity);
     }
 
-    // --- INTERFAZ DE DEPURACIÓN EN PANTALLA ---
+    // --- INTERFAZ DE DEPURACIÃ“N EN PANTALLA ---
     void OnGUI()
     {
+        if (!IsOwner) return;
+
+#if !UNITY_STANDALONE_WIN && !UNITY_EDITOR
+        return;
+#else
         GUIStyle style = new GUIStyle();
-        style.fontSize = 12; 
+        style.fontSize = 12;
         style.normal.textColor = Color.yellow;
         style.fontStyle = FontStyle.Bold;
 
@@ -318,18 +350,18 @@ public class ThirdPController : MonoBehaviour
         float posY = Screen.height - boxHeight - 10f;
 
         GUI.Box(new Rect(posX, posY, boxWidth, boxHeight), "");
-        GUI.Box(new Rect(posX, posY, boxWidth, boxHeight), ""); 
 
         GUILayout.BeginArea(new Rect(posX + 10, posY + 10, boxWidth - 20, boxHeight - 20));
         GUILayout.Label("- DEBUG WII -", style);
         GUILayout.Label("Estado: " + debugState, style);
         GUILayout.Label("Fuerza Act: " + debugAccelMag.ToString("F2"), style);
         GUILayout.Label("Fuerza MAX: " + peakSwingForce.ToString("F2"), style);
-        GUILayout.Label("Inclinación: " + debugAccelY.ToString("F2"), style);
-        
+        GUILayout.Label("Inclinacion: " + debugAccelY.ToString("F2"), style);
+
         style.normal.textColor = Color.green;
         GUILayout.Label("Potencia: " + debugCalculatedForce.ToString("F1"), style);
-        
+
         GUILayout.EndArea();
+#endif
     }
 }

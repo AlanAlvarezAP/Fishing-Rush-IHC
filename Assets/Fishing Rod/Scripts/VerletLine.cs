@@ -21,7 +21,7 @@ public class VerletLine : MonoBehaviour
     public float tensionConstant = 10f;
     public bool SecondHasRigidbody = false;
     public float LerpSpeed = 5.0f; // Aumentado un poco para que reaccione más rápido al recoger
-    public float Delay = 0.1f; // Reducido para que no tarde 3 segundos en reaccionar al lanzar
+    public float Delay = 1.0f; // Reducido para que no tarde 3 segundos en reaccionar al lanzar
     private bool isChangingLength = false;
 
     // Represents a segment of the line.
