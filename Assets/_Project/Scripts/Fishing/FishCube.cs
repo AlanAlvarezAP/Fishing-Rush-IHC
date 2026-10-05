@@ -8,7 +8,7 @@ public class FishCube : NetworkBehaviour
     private Transform playerTransform;
 
     private float lifeTimer = 0f;
-    public float maxLifeTime = 60f;
+    public float maxLifeTime = 90f;
 
     void Update()
     {
@@ -24,6 +24,8 @@ public class FishCube : NetworkBehaviour
 
         if (isHooked && targetHook != null && playerTransform != null)
         {
+            transform.position = targetHook.position;
+
             float distanceToPlayer = Vector3.Distance(transform.position, playerTransform.position);
 
             if (distanceToPlayer < 2.0f)
@@ -72,8 +74,5 @@ public class FishCube : NetworkBehaviour
         {
             rb.isKinematic = true;
         }
-
-        transform.SetParent(hook);
-        transform.localPosition = Vector3.zero;
     }
 }
