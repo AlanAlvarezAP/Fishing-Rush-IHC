@@ -42,6 +42,14 @@ public class WiimoteDemo : MonoBehaviour
     private bool isCalibrated = false;
     private bool isWarmingUp = false;
 
+    void Awake()
+    {
+        if (Application.platform == RuntimePlatform.Android)
+        {
+            this.enabled = false;
+        }
+    }
+
     void Start()
     {
         IsReadyToPlay = false;
@@ -64,6 +72,7 @@ public class WiimoteDemo : MonoBehaviour
 
     void Update()
     {
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR
         if (!WiimoteManager.HasWiimote())
         {
             WiimoteManager.FindWiimotes();
@@ -164,6 +173,7 @@ public class WiimoteDemo : MonoBehaviour
 
         UpdateModelButtons();
         UpdateIRPointers();
+#endif
     }
 
     public void ConfirmInitialCalibration()
@@ -305,10 +315,12 @@ public class WiimoteDemo : MonoBehaviour
 
     void OnApplicationQuit()
     {
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR
         if (wiimote != null)
         {
             WiimoteManager.Cleanup(wiimote);
             wiimote = null;
         }
+#endif
     }
 }
