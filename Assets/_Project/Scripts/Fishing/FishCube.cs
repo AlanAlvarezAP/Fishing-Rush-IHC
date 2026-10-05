@@ -1,22 +1,23 @@
 using UnityEngine;
+using Unity.Netcode;
 
-public class FishCube : MonoBehaviour
+public class FishCube : NetworkBehaviour
 {
     private bool isHooked = false;
     private Transform targetHook;
     private Transform playerTransform;
 
     private float lifeTimer = 0f;
-    private float maxLifeTime = 15f; // Desaparece a los 15s si no se pesca
+    public float maxLifeTime = 60f;
 
     void Update()
     {
-        if (!isHooked)
+        if (IsServer && !isHooked)
         {
             lifeTimer += Time.deltaTime;
             if (lifeTimer >= maxLifeTime)
             {
-                Destroy(gameObject);
+                DespawnFish();
                 return;
             }
         }
@@ -27,12 +28,27 @@ public class FishCube : MonoBehaviour
 
             if (distanceToPlayer < 2.0f)
             {
-                if (FishingCounterManager.Instance != null)
+                if (IsServer)
                 {
-                    FishingCounterManager.Instance.AddFish();
+                    if (FishingCounterManager.Instance != null)
+                    {
+                        FishingCounterManager.Instance.AddFish();
+                    }
+                    DespawnFish();
                 }
-                Destroy(gameObject);
             }
+        }
+    }
+
+    private void DespawnFish()
+    {
+        if (NetworkObject != null && NetworkObject.IsSpawned)
+        {
+            NetworkObject.Despawn();
+        }
+        else
+        {
+            Destroy(gameObject);
         }
     }
 

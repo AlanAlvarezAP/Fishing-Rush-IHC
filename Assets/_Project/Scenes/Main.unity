@@ -444,7 +444,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 69493305}
-  - component: {fileID: 69493304}
+  - component: {fileID: 69493307}
+  - component: {fileID: 69493306}
   m_Layer: 0
   m_Name: FishSpawnerManager
   m_TagString: Untagged
@@ -452,24 +453,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &69493304
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 69493303}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ac5b11e885490ef48aa7dc1089e805e5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  fishPrefab: {fileID: 5580960604176644781, guid: 5eac489dfd0eb64498a88eebe6558509,
-    type: 3}
-  playerTransform: {fileID: 897784911}
-  spawnInterval: 3
-  minDistance: 6
-  maxDistance: 15
 --- !u!4 &69493305
 Transform:
   m_ObjectHideFlags: 0
@@ -485,6 +468,46 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &69493306
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 69493303}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ac5b11e885490ef48aa7dc1089e805e5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  fishPrefab: {fileID: 5580960604176644781, guid: 5eac489dfd0eb64498a88eebe6558509,
+    type: 3}
+  lakeCenter: {fileID: 0}
+  lakeSize: {x: 180, y: 180}
+  waterSurfaceY: -2
+  maxFishCount: 30
+  spawnInterval: 3
+--- !u!114 &69493307
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 69493303}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  GlobalObjectIdHash: 316133345
+  InScenePlacedSourceGlobalObjectIdHash: 0
+  AlwaysReplicateAsRoot: 0
+  SynchronizeTransform: 1
+  ActiveSceneSynchronization: 0
+  SceneMigrationSynchronization: 1
+  SpawnWithObservers: 1
+  DontDestroyWithOwner: 0
+  AutoObjectParentSync: 1
 --- !u!1 &82396990
 GameObject:
   m_ObjectHideFlags: 0
@@ -2883,12 +2906,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!4 &897784911 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 2604924809172461127, guid: 257f9f09ec1cf4240b175641a456adfd,
-    type: 3}
-  m_PrefabInstance: {fileID: 8523933818799061775}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1007312751
 GameObject:
   m_ObjectHideFlags: 0
