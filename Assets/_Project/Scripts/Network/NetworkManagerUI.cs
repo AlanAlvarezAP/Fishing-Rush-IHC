@@ -17,7 +17,7 @@ public class NetworkManagerUI : MonoBehaviour
     [SerializeField] private GameObject hudContainer;
  
     [Header("Configuración de Red")]
-    [SerializeField] private string pcIPAddress = "10.87.165.139";
+    [SerializeField] private string pcIPAddress = "10.55.25.139";
     [SerializeField] private ushort port = 7777;
  
     private void Awake()
@@ -50,7 +50,6 @@ public class NetworkManagerUI : MonoBehaviour
     private IEnumerator Start()
     {
 #if UNITY_ANDROID
-        // Esperamos 1.5 segundos a que Cardboard XR e Input System terminen de cargar en Android
         yield return new WaitForSeconds(2.5f);
 
         if (NetworkManager.Singleton != null)
@@ -68,28 +67,24 @@ public class NetworkManagerUI : MonoBehaviour
     {
         if (uiContainer != null)
         {
-            uiContainer.SetActive(false); // Desaparece el menú de inicio
+            uiContainer.SetActive(false);
         }
 
         if (hudContainer != null)
         {
-            hudContainer.SetActive(true);  // Aparece la interfaz del juego
+            hudContainer.SetActive(true);
         }
     }
  
-    // Server / Host: escucha en todas las interfaces de red disponibles.
     private void SetTransportAsServer()
     {
         var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
         if (transport != null)
         {
-            // transport.SetConnectionData("0.0.0.0", port);
-            //transport.SetConnectionData(pcIPAddress, port, "0.0.0.0");
-            transport.SetConnectionData(pcIPAddress, port, pcIPAddress);
+            transport.SetConnectionData(pcIPAddress, port, "0.0.0.0");
         }
     }
  
-    // Client: se conecta específicamente a la IP de la PC-servidor.
     private void SetTransportAsClient()
     {
         var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
