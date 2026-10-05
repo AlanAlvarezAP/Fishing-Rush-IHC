@@ -132,10 +132,11 @@ public class ThirdPController : NetworkBehaviour
 
             SetHookKinematic(true);
             hookObject.SetActive(false);
-	/*
+	    /*
         if (lineObject != null) lineObject.SetActive(false);
         if (hookObject != null) hookObject.SetActive(false);
         */
+        }
     }
 
     public override void OnNetworkSpawn()
