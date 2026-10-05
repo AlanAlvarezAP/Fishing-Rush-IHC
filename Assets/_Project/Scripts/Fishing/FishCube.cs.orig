@@ -24,28 +24,42 @@ public class FishCube : NetworkBehaviour
         // Si ya está enganchado, hacemos que siga al anzuelo manualmente cada frame
         else if (targetHook != null)
         {
+<<<<<<< HEAD
             // Mantiene la posición exactamente en el anzuelo sin heredar rotaciones locas
             transform.position = targetHook.position;
             transform.rotation = Quaternion.identity; // Opcional: fija la rotación recta
+=======
+            transform.position = targetHook.position;
+
+            float distanceToPlayer = Vector3.Distance(transform.position, playerTransform.position);
+>>>>>>> develop
 
             // Comprobamos la distancia al jugador para sumar el punto
             if (playerTransform != null)
             {
+<<<<<<< HEAD
                 float distanceToPlayer = Vector3.Distance(transform.position, playerTransform.position);
 
                 if (distanceToPlayer < 2.0f)
-                //if (IsServer)
+=======
+                if (IsServer)
+>>>>>>> develop
                 {
                     if (FishingCounterManager.Instance != null)
                     {
                         FishingCounterManager.Instance.AddFish();
                     }
+<<<<<<< HEAD
+                    Destroy(gameObject);
+=======
                     DespawnFish();
+>>>>>>> develop
                 }
             }
         }
     }
 
+<<<<<<< HEAD
     private void OnCollisionEnter(Collision collision)
     {
         if (isHooked) return;
@@ -81,9 +95,7 @@ public class FishCube : NetworkBehaviour
             }
 
             HookMe(hookTransform, playerTr);
-	}
-    }
-
+=======
     private void DespawnFish()
     {
         if (NetworkObject != null && NetworkObject.IsSpawned)
@@ -93,6 +105,7 @@ public class FishCube : NetworkBehaviour
         else
         {
             Destroy(gameObject);
+>>>>>>> develop
         }
     }
 
@@ -118,5 +131,10 @@ public class FishCube : NetworkBehaviour
             rb.isKinematic = true;
             rb.detectCollisions = false; // Evita colisiones fantasma mientras está atrapado
         }
+<<<<<<< HEAD
+
+        // ELIMINADO: Ya no usamos SetParent para evitar que herede giros erráticos
+=======
+>>>>>>> develop
     }
 }

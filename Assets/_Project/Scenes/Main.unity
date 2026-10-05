@@ -146,6 +146,10 @@ PrefabInstance:
       propertyPath: m_AnchoredPosition.y
       value: -0.0000076293945
       objectReference: {fileID: 0}
+    - target: {fileID: 22400762, guid: 67117722a812a2e46ab8cb8eafbf5f5e, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 0.000011444092
+      objectReference: {fileID: 0}
     - target: {fileID: 22426080, guid: 67117722a812a2e46ab8cb8eafbf5f5e, type: 3}
       propertyPath: m_AnchorMax.x
       value: 0
@@ -3287,16 +3291,13 @@ MonoBehaviour:
   EndPoint: {fileID: 1721393592}
   Segments: 10
   lineRenderer: {fileID: 1081114341}
-  SegmentLength: 0.04
-  startSegmentLength: 0.02
-  currentTargetLength: 0
-  maxSegmentLength: 10
+  minTotalLength: 0.5
+  currentTotalLength: 0.5
+  targetTotalLength: 0.5
+  maxTotalLength: 50
   Gravity: {x: 0, y: -9.81, z: 0}
   Iterations: 1000
-  tensionConstant: 1000
-  SecondHasRigidbody: 1
   LerpSpeed: 1.5
-  Delay: 2.5
 --- !u!120 &1081114341
 LineRenderer:
   serializedVersion: 2
@@ -3431,7 +3432,7 @@ SphereCollider:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1081114339}
-  m_Material: {fileID: 13400000, guid: 60df9e143a808c54f873b39ca873d8f3, type: 2}
+  m_Material: {fileID: 0}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -4500,7 +4501,7 @@ GameObject:
   - component: {fileID: 1721393594}
   m_Layer: 0
   m_Name: Cube (5)
-  m_TagString: Untagged
+  m_TagString: Hook
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -4512,7 +4513,7 @@ BoxCollider:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1721393588}
-  m_Material: {fileID: 13400000, guid: 60df9e143a808c54f873b39ca873d8f3, type: 2}
+  m_Material: {fileID: 13400000, guid: dd5f4371974b986458c7ebe781498081, type: 2}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -4584,9 +4585,10 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1721393588}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.027187, y: 0.41, z: 1.17}
-  m_LocalScale: {x: 0.1, y: 0.1, z: 0.1}
+  m_LocalRotation: {x: -0.00000004097819, y: -0.000000003711364, z: 0.000000049818475,
+    w: 1}
+  m_LocalPosition: {x: 0.027187508, y: 0.4099998, z: 1.17}
+  m_LocalScale: {x: 0.09999999, y: 0.099999964, z: 0.09999997}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -4599,7 +4601,7 @@ Rigidbody:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1721393588}
   serializedVersion: 4
-  m_Mass: 30
+  m_Mass: 1
   m_Drag: 1
   m_AngularDrag: 0.1
   m_CenterOfMass: {x: 0, y: 0, z: 0}
@@ -4617,7 +4619,7 @@ Rigidbody:
   m_IsKinematic: 0
   m_Interpolate: 0
   m_Constraints: 0
-  m_CollisionDetection: 0
+  m_CollisionDetection: 1
 --- !u!114 &1721393594
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5019,6 +5021,11 @@ PrefabInstance:
       propertyPath: thirdPersonCamera
       value: 
       objectReference: {fileID: 1071879031}
+    - target: {fileID: 2557545417108597661, guid: 257f9f09ec1cf4240b175641a456adfd,
+        type: 3}
+      propertyPath: m_UseGravity
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 2604924809172461127, guid: 257f9f09ec1cf4240b175641a456adfd,
         type: 3}
       propertyPath: m_LocalPosition.x
@@ -5076,6 +5083,16 @@ PrefabInstance:
       objectReference: {fileID: 1071879032}
     - target: {fileID: 3740452159392131279, guid: 257f9f09ec1cf4240b175641a456adfd,
         type: 3}
+      propertyPath: castDelay
+      value: 1.75
+      objectReference: {fileID: 0}
+    - target: {fileID: 3740452159392131279, guid: 257f9f09ec1cf4240b175641a456adfd,
+        type: 3}
+      propertyPath: reelSpeed
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 3740452159392131279, guid: 257f9f09ec1cf4240b175641a456adfd,
+        type: 3}
       propertyPath: hookObject
       value: 
       objectReference: {fileID: 1721393588}
@@ -5084,10 +5101,25 @@ PrefabInstance:
       propertyPath: lineObject
       value: 
       objectReference: {fileID: 1081114339}
+    - target: {fileID: 3740452159392131279, guid: 257f9f09ec1cf4240b175641a456adfd,
+        type: 3}
+      propertyPath: hookCollider
+      value: 
+      objectReference: {fileID: 1721393589}
+    - target: {fileID: 3740452159392131279, guid: 257f9f09ec1cf4240b175641a456adfd,
+        type: 3}
+      propertyPath: hookFollowSpeed
+      value: 5
+      objectReference: {fileID: 0}
     - target: {fileID: 4359791766550691380, guid: 257f9f09ec1cf4240b175641a456adfd,
         type: 3}
       propertyPath: m_IsActive
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4945997016110300390, guid: 257f9f09ec1cf4240b175641a456adfd,
+        type: 3}
+      propertyPath: m_Material
+      value: 
       objectReference: {fileID: 0}
     - target: {fileID: 5615491806873609494, guid: 257f9f09ec1cf4240b175641a456adfd,
         type: 3}

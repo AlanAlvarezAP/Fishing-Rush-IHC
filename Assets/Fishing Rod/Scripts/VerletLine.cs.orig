@@ -15,9 +15,20 @@ public class VerletLine : MonoBehaviour
     public float maxTotalLength = 50.0f;
     public Vector3 Gravity = new Vector3(0, -9.81f, 0);
 
+<<<<<<< HEAD
     [Header("Físicas Verlet")]
     public int Iterations = 8;
     public float LerpSpeed = 12.0f;
+=======
+    // Num of Physics iterations
+    public int Iterations = 6;
+    // higher is stiffer, lower is stretchier
+    public float tensionConstant = 10f;
+    public bool SecondHasRigidbody = false;
+    public float LerpSpeed = 5.0f; // Aumentado un poco para que reaccione más rápido al recoger
+    public float Delay = 1.0f; // Reducido para que no tarde 3 segundos en reaccionar al lanzar
+    private bool isChangingLength = false;
+>>>>>>> develop
 
     private class LineParticle
     {
