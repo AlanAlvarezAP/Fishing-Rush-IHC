@@ -480,11 +480,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ac5b11e885490ef48aa7dc1089e805e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  fishPrefab: {fileID: 5580960604176644781, guid: 5eac489dfd0eb64498a88eebe6558509,
+  fishPrefab: {fileID: 1019849492310305838, guid: 7a71d98eb705f8d4eb8daad12f17752b,
     type: 3}
   lakeCenter: {fileID: 0}
   lakeSize: {x: 180, y: 180}
-  waterSurfaceY: -2
+  waterSurfaceY: -3.75
   maxFishCount: 30
   spawnInterval: 3
 --- !u!114 &69493307

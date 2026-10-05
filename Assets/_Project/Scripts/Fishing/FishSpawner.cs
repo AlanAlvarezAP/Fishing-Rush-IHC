@@ -8,7 +8,7 @@ public class FishSpawner : NetworkBehaviour
     [Header("Limites del Lago")]
     public Transform lakeCenter;
     public Vector2 lakeSize = new Vector2(180f, 180f);
-    public float waterSurfaceY = -2f;
+    public float waterSurfaceY = -3.75f;
 
     [Header("Control de Poblacion")]
     public int maxFishCount = 30;

@@ -14,7 +14,7 @@ public class FishingCounterManager : MonoBehaviour
     public void AddFish()
     {
         fishCount++;
-        Debug.Log("¡Pez capturado! Total: " + fishCount);
+        Debug.Log("Pez capturado Total: " + fishCount);
     }
 
     void OnGUI()

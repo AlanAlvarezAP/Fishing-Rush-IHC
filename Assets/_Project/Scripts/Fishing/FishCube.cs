@@ -60,6 +60,13 @@ public class FishCube : NetworkBehaviour
         targetHook = hook;
         playerTransform = player;
 
+        FishAlive.FishMotion motion = GetComponentInChildren<FishAlive.FishMotion>();
+        if (motion != null)
+        {
+            motion.SetAutoMotion(false);
+            motion.transform.localPosition = Vector3.zero;
+        }
+
         Rigidbody rb = GetComponent<Rigidbody>();
         if (rb != null)
         {
