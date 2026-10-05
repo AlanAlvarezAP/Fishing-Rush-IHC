@@ -1,7 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using WiimoteApi;
 using Unity.Netcode;
 
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR
@@ -50,7 +49,7 @@ public class ThirdPController : NetworkBehaviour
     [SerializeField] private Transform rodTip;
     [SerializeField] private Collider hookCollider;
 
-    [Header("Ajustes de Animación y Cuelgue")]
+    [Header("Ajustes de Animacion y Cuelgue")]
     [SerializeField] private float castDelay = 1.75f;
     [SerializeField] private float reelSpeed = 15f;
     [SerializeField] private float reelArcHeight = 2.5f;
@@ -170,8 +169,8 @@ public class ThirdPController : NetworkBehaviour
         else if (isCastingInProcess) debugState = "Cargando tiro...";
         else if (isReeling) debugState = "Recogiendo...";
         else if (alreadyCast) debugState = "En el agua";
-        else if (wiiCastState == 1) debugState = "¡Caña Arriba! (Lanza)";
-        else debugState = "Levanta a 90° para preparar";
+        else if (wiiCastState == 1) debugState = "Cana Arriba (Lanza)";
+        else debugState = "Levanta a 90 para preparar";
 
         bool wiiCastTrigger = false;
         bool wiiReelTrigger = false;
@@ -433,7 +432,9 @@ public class ThirdPController : NetworkBehaviour
                 }
                 controller.Move(moveDirection * currentSpeed * Time.deltaTime);
             }
-            else if (controller.isGrounded)
+        }
+
+            if (controller.isGrounded)
             {
                 if (bhopEnabled)
                 {
@@ -448,9 +449,21 @@ public class ThirdPController : NetworkBehaviour
             currentVelY = Mathf.Lerp(currentVelY, targetVelY, speedChangeRate);
             animator.SetFloat("velY", currentVelY);
 
-            playerVelocity.y += gravityFactor * gravity * Time.deltaTime;
+            
+            if (controller.isGrounded && playerVelocity.y < 0)
+            {
+                if (animator != null) animator.SetBool("isGrounded", true);
+                playerVelocity.y = -2f; // Mantener adherido firmemente al terreno
+            }
+            else
+            {
+                playerVelocity.y += gravityFactor * gravity * Time.deltaTime;
+            }
+            
+
+            //playerVelocity.y += gravityFactor * gravity * Time.deltaTime;
             controller.Move(playerVelocity * Time.deltaTime);
-        }
+        //}
     }
 
     private IEnumerator ExecuteCastWithDelay(float force)
