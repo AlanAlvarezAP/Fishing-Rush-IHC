@@ -1,22 +1,23 @@
 using UnityEngine;
+using Unity.Netcode;
 
-public class FishCube : MonoBehaviour
+public class FishCube : NetworkBehaviour
 {
     private bool isHooked = false;
     private Transform targetHook;
     private Transform playerTransform;
 
     private float lifeTimer = 0f;
-    private float maxLifeTime = 15f; // Desaparece a los 15s si no se pesca
+    public float maxLifeTime = 90f;
 
     void Update()
     {
-        if (!isHooked)
+        if (IsServer && !isHooked)
         {
             lifeTimer += Time.deltaTime;
             if (lifeTimer >= maxLifeTime)
             {
-                Destroy(gameObject);
+                DespawnFish();
                 return;
             }
         }
@@ -33,12 +34,13 @@ public class FishCube : MonoBehaviour
                 float distanceToPlayer = Vector3.Distance(transform.position, playerTransform.position);
 
                 if (distanceToPlayer < 2.0f)
+                //if (IsServer)
                 {
                     if (FishingCounterManager.Instance != null)
                     {
                         FishingCounterManager.Instance.AddFish();
                     }
-                    Destroy(gameObject);
+                    DespawnFish();
                 }
             }
         }
@@ -79,6 +81,18 @@ public class FishCube : MonoBehaviour
             }
 
             HookMe(hookTransform, playerTr);
+	}
+    }
+
+    private void DespawnFish()
+    {
+        if (NetworkObject != null && NetworkObject.IsSpawned)
+        {
+            NetworkObject.Despawn();
+        }
+        else
+        {
+            Destroy(gameObject);
         }
     }
 
@@ -90,6 +104,13 @@ public class FishCube : MonoBehaviour
         targetHook = hook;
         playerTransform = player;
 
+        FishAlive.FishMotion motion = GetComponentInChildren<FishAlive.FishMotion>();
+        if (motion != null)
+        {
+            motion.SetAutoMotion(false);
+            motion.transform.localPosition = Vector3.zero;
+        }
+
         Rigidbody rb = GetComponent<Rigidbody>();
         if (rb != null)
         {
@@ -97,7 +118,5 @@ public class FishCube : MonoBehaviour
             rb.isKinematic = true;
             rb.detectCollisions = false; // Evita colisiones fantasma mientras está atrapado
         }
-
-        // ELIMINADO: Ya no usamos SetParent para evitar que herede giros erráticos
     }
 }

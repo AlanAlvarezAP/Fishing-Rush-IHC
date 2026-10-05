@@ -1,41 +1,52 @@
-# Unity .gitattributes Template
-# Source: https://github.com/gitattributes/gitattributes/blob/master/Unity.gitattributes
-# Last synced: 2026-02-04
-# License: MIT
-#
-# This template is maintained from the gitattributes/gitattributes repository
-# and distributed under MIT License.
+# Unity .gitattributes
 
-# Define macros (only works in top-level gitattributes files)
+# ---------------------------------------------------------------
+# Macros
+# ---------------------------------------------------------------
 [attr]lfs               filter=lfs diff=lfs merge=lfs -text
 [attr]unity-json        eol=lf linguist-language=json
 [attr]unity-yaml        merge=unityyamlmerge eol=lf linguist-language=yaml
 
-# Optionally collapse Unity YAML files on GitHub diffs
-# [attr]unity-yaml        merge=unityyamlmerge text linguist-language=yaml linguist-generated
+# ---------------------------------------------------------------
+# Todo binario nuevo que uses debe agregarse abajo como lfs/binary
+# ---------------------------------------------------------------
+* text=auto
 
-# Unity source files
-*.cginc                 text
-*.compute               text linguist-language=hlsl
-*.cs                    text diff=csharp
-*.hlsl                  text linguist-language=hlsl
-*.raytrace              text linguist-language=hlsl
-*.shader                text
+# ---------------------------------------------------------------
+# Codigo y texto explicitos
+# ---------------------------------------------------------------
+*.cs                    text diff=csharp eol=lf
+*.cginc                 text eol=lf
+*.compute               text linguist-language=hlsl eol=lf
+*.hlsl                  text linguist-language=hlsl eol=lf
+*.shader                text eol=lf
+*.json                  text eol=lf
+*.wlt                   text eol=lf
+*.conf                  text eol=lf
+*.md                    text eol=lf
+*.txt                   text eol=lf
 
-# Unity JSON files
+# Scripts de shell
+*.bat                   text eol=crlf
+*.cmd                   text eol=crlf
+*.sh                    text eol=lf
+
+# ---------------------------------------------------------------
+# JSON / UI Toolkit de Unity
+# ---------------------------------------------------------------
 *.asmdef                unity-json
 *.asmref                unity-json
 *.index                 unity-json
 *.inputactions          unity-json
 *.shadergraph           unity-json
 *.shadersubgraph        unity-json
-
-# Unity UI Toolkit files
 *.tss                   text diff=css linguist-language=css
 *.uss                   text diff=css linguist-language=css
-*.uxml                  text linguist-language=xml linguist-detectable
+*.uxml                  text linguist-language=xml
 
-# Unity YAML files
+# ---------------------------------------------------------------
+# YAML de Unity
+# ---------------------------------------------------------------
 *.anim                  unity-yaml
 *.asset                 unity-yaml
 *.brush                 unity-yaml
@@ -61,111 +72,98 @@
 *.spriteatlasv2         unity-yaml
 *.terrainlayer          unity-yaml
 *.unity                 unity-yaml
-
-# "physic" for 3D but "physics" for 2D
 *.physicMaterial        unity-yaml
 *.physicsMaterial2D     unity-yaml
+*.vfx                   unity-yaml
+*.vfxoperator           unity-yaml
+*.vfxblock              unity-yaml
 
-# Exclude from GitHub stats and diffs: third-party plugins, packages lock file
-Assets/Plugins/**           linguist-generated
-Packages/packages-lock.json linguist-generated
+# ---------------------------------------------------------------
+# EXCEPCIONES de .asset: binarios o pesados (DEBEN ir despues de *.asset)
+# lfs incluye -text, asi Git NUNCA toca los saltos de linea.
+# Ajusta la ruta si tus terrenos NO estan en Assets/Terrains/
+# ---------------------------------------------------------------
+Assets/Terrains/**/*.asset   lfs
+NavMesh*.asset               lfs
+OcclusionCullingData.asset   lfs
+LightingData.asset           lfs
+*.raw                        binary
 
-# Unity LFS
+# ---------------------------------------------------------------
+# Binarios que no deben pasar por la heuristica text=auto
+# ---------------------------------------------------------------
+*.bytes                 binary
+*.bank                  binary
+
+# ---------------------------------------------------------------
+# Archivos pesados gestionados por Git LFS
+# (se quitaron *.unitypackage, *.apk, *.blend1 y *.pdb porque
+#  estan en .gitignore y se contradecian)
+# ---------------------------------------------------------------
+# Unity
 *.cubemap               lfs
-*.unitypackage          lfs
 
-# 3D models
+# Modelos 3D
 *.3dm                   lfs
 *.3ds                   lfs
 *.blend                 lfs
-*.blend1                lfs
 *.c4d                   lfs
 *.collada               lfs
 *.dae                   lfs
 *.dxf                   lfs
 *.FBX                   lfs
 *.fbx                   lfs
-*.jas                   lfs
-*.lws                   lfs
-*.lxo                   lfs
+*.glb                   lfs
+*.gltf                  lfs
 *.ma                    lfs
-*.max                   lfs
 *.mb                    lfs
 *.obj                   lfs
 *.ply                   lfs
-*.skp                   lfs
 *.stl                   lfs
-*.ztl                   lfs
 
 # Audio
 *.aif                   lfs
 *.aiff                  lfs
-*.it                    lfs
-*.mod                   lfs
+*.flac                  lfs
+*.m4a                   lfs
 *.mp3                   lfs
 *.ogg                   lfs
-*.s3m                   lfs
 *.wav                   lfs
-*.xm                    lfs
 
 # Video
-*.asf                   lfs
 *.avi                   lfs
-*.flv                   lfs
 *.mov                   lfs
 *.mp4                   lfs
-*.mpeg                  lfs
-*.mpg                   lfs
-*.ogv                   lfs
-*.wmv                   lfs
+*.webm                  lfs
 
-# Images
+# Imagenes y texturas
 *.bmp                   lfs
+*.dds                   lfs
 *.exr                   lfs
 *.gif                   lfs
 *.hdr                   lfs
-*.iff                   lfs
 *.jpeg                  lfs
 *.jpg                   lfs
-*.pict                  lfs
 *.png                   lfs
+*.psb                   lfs
 *.psd                   lfs
+*.sbsar                 lfs
 *.tga                   lfs
 *.tif                   lfs
 *.tiff                  lfs
 *.webp                  lfs
 
-# Compressed Archive
+# Comprimidos, librerias y otros
 *.7z                    lfs
-*.bz2                   lfs
-*.gz                    lfs
 *.rar                   lfs
-*.tar                   lfs
 *.zip                   lfs
-
-# Compiled Dynamic Library
 *.dll                   lfs
-*.pdb                   lfs
 *.so                    lfs
-
-# Fonts
-*.otf                   lfs
-*.ttf                   lfs
-
-# Executable/Installer
-*.apk                   lfs
+*.jar                   lfs
+*.aar                   lfs
 *.exe                   lfs
-
-# Documents
 *.pdf                   lfs
 
-# ETC
-*.a                     lfs
-*.reason                lfs
-*.rns                   lfs
-
-# Spine export file for Unity
-*.skel.bytes            lfs
-
-# Exceptions for .asset files such as lightning pre-baking
-LightingData.asset     binary
+# Fuentes
+*.otf                   lfs
+*.ttf                   lfs

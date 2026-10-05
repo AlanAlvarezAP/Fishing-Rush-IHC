@@ -2,8 +2,13 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using WiimoteApi;
+using Unity.Netcode;
 
-public class ThirdPController : MonoBehaviour
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR
+using WiimoteApi;
+#endif
+
+public class ThirdPController : NetworkBehaviour
 {
     public CharacterController controller;
     public new Transform camera;
@@ -84,7 +89,6 @@ public class ThirdPController : MonoBehaviour
     private bool wasWiiA = false;
     private bool wasWiiPlus = false;
 
-    // Variables de Debug
     private float debugAccelMag = 0f;
     private float debugAccelY = 0f;
     private float debugCalculatedForce = 12f;
@@ -93,6 +97,17 @@ public class ThirdPController : MonoBehaviour
     void Start()
     {
         controller = GetComponent<CharacterController>();
+	/*
+        if (animator != null) animator.SetBool("startFishing", false);
+        if (fishingRod != null) fishingRod.SetActive(false);
+
+        if (lineObject != null) lineObject.SetActive(false);
+        if (hookObject != null) hookObject.SetActive(false);
+
+        if (camera == null && Camera.main != null)
+            camera = Camera.main.transform;
+	*/
+
         Cursor.lockState = CursorLockMode.Locked;
         cinput = GetComponent<CharacterInputController>();
         animator.SetBool("startFishing", false);
@@ -117,11 +132,39 @@ public class ThirdPController : MonoBehaviour
 
             SetHookKinematic(true);
             hookObject.SetActive(false);
+	/*
+        if (lineObject != null) lineObject.SetActive(false);
+        if (hookObject != null) hookObject.SetActive(false);
+        */
+    }
+
+    public override void OnNetworkSpawn()
+    {
+        if (IsOwner)
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
         }
     }
 
     void Update()
     {
+        if (!IsOwner) return;
+
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            if (Cursor.lockState == CursorLockMode.Locked)
+            {
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+            }
+            else
+            {
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
+            }
+        }
+
         if (!isFishing) debugState = "No pescando";
         else if (isCastingInProcess) debugState = "Cargando tiro...";
         else if (isReeling) debugState = "Recogiendo...";
@@ -129,7 +172,6 @@ public class ThirdPController : MonoBehaviour
         else if (wiiCastState == 1) debugState = "¡Caña Arriba! (Lanza)";
         else debugState = "Levanta a 90° para preparar";
 
-        // --- LECTURA DEL MANDO WII ---
         bool wiiCastTrigger = false;
         bool wiiReelTrigger = false;
         bool wiiEquipTrigger = false;
@@ -138,6 +180,7 @@ public class ThirdPController : MonoBehaviour
         float wiiHorizontal = 0f;
         float wiiVertical = 0f;
 
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR
         if (WiimoteManager.HasWiimote() && WiimoteManager.Wiimotes.Count > 0)
         {
             Wiimote wiimote = WiimoteManager.Wiimotes[0];
@@ -257,10 +300,11 @@ public class ThirdPController : MonoBehaviour
             if (wiimote.Button.d_left) wiiHorizontal = -1f;
             if (wiimote.Button.d_right) wiiHorizontal = 1f;
         }
+#endif
 
         if (controller.isGrounded && playerVelocity.y < 0)
         {
-            animator.SetBool("isGrounded", true);
+            if (animator != null) animator.SetBool("isGrounded", true);
             playerVelocity.y = 0f;
             playerVelocity.x = 0f;
             playerVelocity.z = 0f;
@@ -271,11 +315,11 @@ public class ThirdPController : MonoBehaviour
         {
             if (!isFishing)
             {
-                animator.SetBool("startFishing", true);
+                if (animator != null) animator.SetBool("startFishing", true);
                 isFishing = true;
                 currentVelY = 0f;
                 targetVelY = 0f;
-                animator.SetFloat("velY", 0f);
+                if (animator != null) animator.SetFloat("velY", 0f);
 
                 if (hookObject != null && rodTip != null)
                 {
@@ -288,16 +332,16 @@ public class ThirdPController : MonoBehaviour
                     if (hookCollider != null) hookCollider.isTrigger = false;
                 }
 
-                fishingRod.SetActive(true);
+                if (fishingRod != null) fishingRod.SetActive(true);
                 if (lineObject != null) lineObject.SetActive(true);
                 if (hookObject != null) hookObject.SetActive(true);
                 if (verletScript != null) verletScript.ResetRope();
             }
             else if (isFishing && !alreadyCast && !isReeling && !isCastingInProcess)
             {
-                animator.SetBool("startFishing", false);
+                if (animator != null) animator.SetBool("startFishing", false);
                 isFishing = false;
-                fishingRod.SetActive(false);
+                if (fishingRod != null) fishingRod.SetActive(false);
                 if (lineObject != null) lineObject.SetActive(false);
                 if (hookObject != null) hookObject.SetActive(false);
             }
@@ -318,7 +362,7 @@ public class ThirdPController : MonoBehaviour
             StartReeling();
         }
 
-        if (isReeling)
+        if (isReeling && animator != null)
         {
             if (reelTotalDistance > 0.1f)
             {
@@ -553,6 +597,11 @@ public class ThirdPController : MonoBehaviour
 
     void OnGUI()
     {
+        if (!IsOwner) return;
+
+#if !UNITY_STANDALONE_WIN && !UNITY_EDITOR
+        return;
+#else
         GUIStyle style = new GUIStyle();
         style.fontSize = 12;
         style.normal.textColor = Color.yellow;
@@ -585,5 +634,6 @@ public class ThirdPController : MonoBehaviour
         GUILayout.Label("Potencia Tiro Final: " + debugCalculatedForce.ToString("F1"), style);
 
         GUILayout.EndArea();
+#endif
     }
 }

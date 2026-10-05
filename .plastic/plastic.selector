@@ -1,0 +1,4 @@
+repository "FishingRush-1.1v/FishingRush-1.1v@4674244772435@cloud"
+  path "/"
+    br "/main"
+    co "/main"
