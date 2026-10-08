@@ -8,16 +8,20 @@ public class VerletLine : MonoBehaviour
     public int Segments = 12;
     public LineRenderer lineRenderer;
 
-    [Header("Configuración de Cuerda")]
+    [Header("Configuracion de Cuerda")]
     public float minTotalLength = 0.5f;
     public float currentTotalLength = 0.5f;
     public float targetTotalLength = 0.5f;
     public float maxTotalLength = 50.0f;
     public Vector3 Gravity = new Vector3(0, -9.81f, 0);
 
-    [Header("Físicas Verlet")]
+    [Header("Fisicas Verlet")]
     public int Iterations = 8;
     public float LerpSpeed = 12.0f;
+
+    [Header("Lomite de Agua")]
+    public float waterSurfaceY = -2.0f;
+    public bool enableWaterSurface = true;
 
     private class LineParticle
     {
@@ -67,7 +71,7 @@ public class VerletLine : MonoBehaviour
         // Interpola longitud objetivo
         currentTotalLength = Mathf.Lerp(currentTotalLength, targetTotalLength, LerpSpeed * Time.deltaTime);
 
-        // PREVENCIÓN DE EXPLOSIÓN: La cuerda jamás puede ser más corta que la distancia real entre extremos
+        // PREVENCIï¿½N DE EXPLOSIï¿½N: La cuerda jamï¿½s puede ser mï¿½s corta que la distancia real entre extremos
         if (StartPoint != null && EndPoint != null)
         {
             float realDistance = Vector3.Distance(StartPoint.position, EndPoint.position);
@@ -99,7 +103,19 @@ public class VerletLine : MonoBehaviour
             }
         }
 
-        // Fijar extremos exactamente en la caña y el anzuelo
+        // --- RESTRICCIÃ“N PARA FLOTACIÃ“N DE CUERDA ---
+        if (enableWaterSurface && particles != null)
+        {
+            foreach (var p in particles)
+            {
+                if (p.Pos.y < waterSurfaceY)
+                {
+                    p.Pos.y = waterSurfaceY;
+                }
+            }
+        }
+
+        // Fijar extremos exactamente en la caï¿½a y el anzuelo
         particles[0].Pos = StartPoint.position;
         particles[particles.Count - 1].Pos = EndPoint.position;
     }
@@ -110,7 +126,7 @@ public class VerletLine : MonoBehaviour
         if (lineRenderer == null || particles == null || particles.Count == 0) return;
         if (StartPoint == null || EndPoint == null) return;
 
-        // Asegurar que los extremos estén pegados en el render de este frame
+        // Asegurar que los extremos estï¿½n pegados en el render de este frame
         particles[0].Pos = StartPoint.position;
         particles[particles.Count - 1].Pos = EndPoint.position;
 

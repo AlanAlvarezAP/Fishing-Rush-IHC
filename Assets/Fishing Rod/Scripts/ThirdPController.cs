@@ -56,6 +56,15 @@ public class ThirdPController : NetworkBehaviour
     [SerializeField] private float hangDistance = 0.4f;
     [SerializeField] private float hookFollowSpeed = 12f;
 
+    [Header("Ajustes de Agua")]
+    public float waterSurfaceY = -2.0f;
+
+    [Header("Ajustes de Recogida")]
+    public float liftThreshold = 0.9f;
+    public float waterRippleAmount = 0.1f;
+
+    [Header("Otros")]
+
     private VerletLine verletScript;
     private float currentMaxLineLength = 0.5f;
     private Rigidbody hookRb;
@@ -72,11 +81,11 @@ public class ThirdPController : NetworkBehaviour
     private float phase1Timer = 0f;
     [SerializeField] private float phase1MaxTime = 1.5f; // Tiempo límite para lanzar tras preparar
 
-    [Header("Configuración de Ventana de Movimiento (Wii)")]
-    public int windowSize = 25; // Tamaño de la ventana para evaluar el movimiento
+    [Header("Configuracion de Ventana de Movimiento (Wii)")]
+    public int windowSize = 25;
     private Queue<float> movementWindow = new Queue<float>();
 
-    [Header("Umbrales de Fuerza (Latigazo Dinámico)")]
+    [Header("Umbrales de Fuerza (Latigazo Dinamico)")]
     public float umbralMinimo = 0.6f;
     public float umbralAlto = 1.8f;
 
@@ -350,7 +359,7 @@ public class ThirdPController : NetworkBehaviour
         // --- LANZAMIENTO ---
         if ((Input.GetMouseButtonDown(0) || wiiCastTrigger) && isFishing && !alreadyCast && !isReeling && !isCastingInProcess)
         {
-            if (Input.GetMouseButtonDown(0)) debugCalculatedForce = 10f;
+            if (Input.GetMouseButtonDown(0)) debugCalculatedForce = 25f;
             animator.SetTrigger("cast");
             StartCoroutine(ExecuteCastWithDelay(debugCalculatedForce));
         }
@@ -378,12 +387,37 @@ public class ThirdPController : NetworkBehaviour
             if (hookObject != null && rodTip != null)
             {
                 Vector3 targetEndPos = rodTip.position + (Vector3.down * hangDistance);
-                Vector3 currentLinearPos = Vector3.Lerp(reelStartPos, targetEndPos, clampedProgress);
-                float arc = Mathf.Sin(clampedProgress * Mathf.PI) * reelArcHeight;
-                Vector3 finalPos = currentLinearPos + Vector3.up * arc;
+
+                float currentX = Mathf.Lerp(reelStartPos.x, targetEndPos.x, clampedProgress);
+                float currentZ = Mathf.Lerp(reelStartPos.z, targetEndPos.z, clampedProgress);
+                float currentY;
+
+                if (clampedProgress < liftThreshold)
+                {
+                    // FASE 1: Se arrastra en el agua con un bamboleo constante
+                    float ripple = Mathf.Sin(Time.time * 20f) * waterRippleAmount;
+                    currentY = waterSurfaceY + ripple;
+                }
+                else
+                {
+                    // FASE 2: Despegue del agua y elevación suave hasta la caña
+                    float liftNormalized = (clampedProgress - liftThreshold) / (1f - liftThreshold);
+                    float smoothLift = Mathf.SmoothStep(0f, 1f, liftNormalized);
+
+                    currentY = Mathf.Lerp(waterSurfaceY, targetEndPos.y, smoothLift);
+                }
+
+                Vector3 finalPos = new Vector3(currentX, currentY, currentZ);
 
                 if (hookRb != null) hookRb.position = finalPos;
                 else hookObject.transform.position = finalPos;
+
+                //Vector3 currentLinearPos = Vector3.Lerp(reelStartPos, targetEndPos, clampedProgress);
+                //float arc = Mathf.Sin(clampedProgress * Mathf.PI) * reelArcHeight;
+                //Vector3 finalPos = currentLinearPos + Vector3.up * arc;
+
+                //if (hookRb != null) hookRb.position = finalPos;
+                //else hookObject.transform.position = finalPos;
             }
 
             if (hookObject != null && rodTip != null)
@@ -552,6 +586,23 @@ public class ThirdPController : NetworkBehaviour
         }
         else if (alreadyCast && !isReeling && hookObject != null && rodTip != null)
         {
+            // --- FLOTACIÓN Y FRENO EN LA SUPERFICIE DEL AGUA ---
+            if (hookRb != null && !hookRb.isKinematic)
+            {
+                if (hookObject.transform.position.y <= waterSurfaceY)
+                {
+                    Vector3 pos = hookRb.position;
+                    pos.y = waterSurfaceY;
+                    hookRb.position = pos;
+
+                    Vector3 vel = hookRb.velocity;
+                    if (vel.y < 0) vel.y = 0;
+                    vel.x = Mathf.Lerp(vel.x, 0, Time.fixedDeltaTime * 2f);
+                    vel.z = Mathf.Lerp(vel.z, 0, Time.fixedDeltaTime * 2f);
+                    hookRb.velocity = vel;
+                }
+            }
+
             Vector3 direction = hookObject.transform.position - rodTip.position;
             float currentDist = direction.magnitude;
 
