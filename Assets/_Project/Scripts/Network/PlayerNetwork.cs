@@ -5,58 +5,83 @@ using Unity.Netcode;
 
 public class PlayerNetwork : NetworkBehaviour
 {
-    [Header("Cámaras del Personaje")]
-    [SerializeField] private GameObject firstPersonCamera;  // Cámara 1ª Persona (Cardboard VR)
-    [SerializeField] private GameObject thirdPersonCamera; // Cámara 3ª Persona (Cinemachine)
+    [Header("Camaras del Personaje")]
+    [SerializeField] private GameObject firstPersonCamera;
+    [SerializeField] private GameObject thirdPersonCamera;
 
     [Header("Referencias Visuales del Personaje")]
     [SerializeField] private SkinnedMeshRenderer[] characterMeshRenderers;
 
-    // Propiedad pública para que ThirdPController lea la orientación VR
     public float ClientCameraYaw { get; private set; } = 0f;
 
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
 
-        // 1. Desactivar CameraSwitcher para que no interfiera mediante teclado
         CameraSwitcher switcher = GetComponent<CameraSwitcher>();
-        if (switcher != null) switcher.enabled = false;
+
+        if (!IsOwner)
+        {
+            AudioListener fpListener = firstPersonCamera.GetComponent<AudioListener>();
+            AudioListener tpListener = thirdPersonCamera.GetComponent<AudioListener>();
+            if (fpListener != null) fpListener.enabled = false;
+            if (tpListener != null) tpListener.enabled = false;
+
+            if (firstPersonCamera != null) firstPersonCamera.SetActive(false);
+            if (thirdPersonCamera != null) thirdPersonCamera.SetActive(false);
+            if (switcher != null) switcher.enabled = false;
+            return;
+        }
+
+        GameObject externalCam = GameObject.FindWithTag("MainCamera");
+        if (externalCam != null && externalCam != firstPersonCamera && externalCam != thirdPersonCamera)
+        {
+            externalCam.SetActive(false);
+        }
+
+        //if (switcher != null) switcher.enabled = false;
 
         if (IsClient && !IsHost)
         {
             // === ROL CLIENTE (Android VR) ===
+            if (switcher != null) switcher.enabled = false;
 
-            // 1. Buscamos la cámara externa flotante del menú/escena y la apagamos
-            GameObject externalCam = GameObject.FindWithTag("MainCamera");
-            if (externalCam != null && externalCam != firstPersonCamera)
-            {
-                externalCam.SetActive(false);
-            }
 
-            // 2. Apagamos la cámara de 3ra persona y activamos la de 1ra persona
             if (thirdPersonCamera != null) thirdPersonCamera.SetActive(false);
 
             if (firstPersonCamera != null) 
             {
-                firstPersonCamera.tag = "MainCamera"; // Forzamos el Tag
-                firstPersonCamera.SetActive(true);   // Activamos la cámara VR
+                firstPersonCamera.tag = "MainCamera";
+                firstPersonCamera.SetActive(true);
             }
 
-            // 3. Ocultamos el cuerpo en el visor
-            //HideBodyOnClient();
+            // hide player body
+            HideBodyOnClient();
         }
         else if (IsServer)
         {
             // === ROL SERVIDOR / HOST (PC) ===
-            if (firstPersonCamera != null) firstPersonCamera.SetActive(false);
-            if (thirdPersonCamera != null) thirdPersonCamera.SetActive(true);
+            if (switcher != null)
+            {
+                if (switcher.characterMeshRenderers == null || switcher.characterMeshRenderers.Length == 0)
+                {
+                    switcher.characterMeshRenderers = characterMeshRenderers;
+                }
+
+                switcher.enabled = true;
+                switcher.SetCameraMode(false);
+
+                //if (firstPersonCamera != null) firstPersonCamera.SetActive(false);
+                //if (thirdPersonCamera != null) thirdPersonCamera.SetActive(true);
+
+                //switcher.startInFirstPerson = false;
+                //switcher.enabled = true; switcher.SetCameraMode(false);
+            }
         }
     }
 
     private void Update()
     {
-        // El Cliente envía constantemente la orientación Y de su mirada al Servidor
         if (IsClient && !IsHost)
         {
             SendHeadRotationToServer();
@@ -65,7 +90,6 @@ public class PlayerNetwork : NetworkBehaviour
 
     private void SendHeadRotationToServer()
     {
-        // Leemos la rotación Y de la primera persona activa
         if (firstPersonCamera != null)
         {
             float currentYaw = firstPersonCamera.transform.eulerAngles.y;

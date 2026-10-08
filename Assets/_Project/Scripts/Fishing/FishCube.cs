@@ -10,37 +10,53 @@ public class FishCube : NetworkBehaviour
     private float lifeTimer = 0f;
     public float maxLifeTime = 90f;
 
+    [Header("UI del Pez")]
+    [SerializeField] private FishTimerUI timerUI;
+
     void Update()
     {
-        if (IsServer && !isHooked)
+        if (!isHooked)
         {
             lifeTimer += Time.deltaTime;
-            if (lifeTimer >= maxLifeTime)
+
+            if (timerUI != null)
+            {
+                timerUI.UpdateTimer(lifeTimer, maxLifeTime);
+            }
+
+            if (IsServer && lifeTimer >= maxLifeTime)
             {
                 DespawnFish();
                 return;
             }
         }
-        // Si ya está enganchado, hacemos que siga al anzuelo manualmente cada frame
-        else if (targetHook != null)
+        else
         {
-            // Mantiene la posición exactamente en el anzuelo sin heredar rotaciones locas
-            transform.position = targetHook.position;
-            transform.rotation = Quaternion.identity; // Opcional: fija la rotación recta
+            if (timerUI != null && timerUI.gameObject.activeSelf)
+            {
+                timerUI.gameObject.SetActive(false);
+            }
+        }
 
-            // Comprobamos la distancia al jugador para sumar el punto
+        if (targetHook != null)
+        {
+            transform.position = targetHook.position;
+            transform.rotation = Quaternion.identity;
+
             if (playerTransform != null)
             {
                 float distanceToPlayer = Vector3.Distance(transform.position, playerTransform.position);
 
                 if (distanceToPlayer < 2.0f)
-                //if (IsServer)
                 {
-                    if (FishingCounterManager.Instance != null)
+                    if (IsServer)
                     {
-                        FishingCounterManager.Instance.AddFish();
+                        if (FishingCounterManager.Instance != null)
+                        {
+                            FishingCounterManager.Instance.AddFish();
+                        }
+                        DespawnFish();
                     }
-                    DespawnFish();
                 }
             }
         }
@@ -114,9 +130,8 @@ public class FishCube : NetworkBehaviour
         Rigidbody rb = GetComponent<Rigidbody>();
         if (rb != null)
         {
-            // Desactivamos la gravedad y las físicas del pez para que no pelee con el anzuelo
             rb.isKinematic = true;
-            rb.detectCollisions = false; // Evita colisiones fantasma mientras está atrapado
+            rb.detectCollisions = false;
         }
     }
 }
