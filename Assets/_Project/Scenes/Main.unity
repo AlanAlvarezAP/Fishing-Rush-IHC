@@ -144,7 +144,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 22400762, guid: 67117722a812a2e46ab8cb8eafbf5f5e, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: 0.00002670288
+      value: -0.000019073486
       objectReference: {fileID: 0}
     - target: {fileID: 22426080, guid: 67117722a812a2e46ab8cb8eafbf5f5e, type: 3}
       propertyPath: m_AnchorMax.x
@@ -486,7 +486,7 @@ MonoBehaviour:
   lakeSize: {x: 180, y: 180}
   waterSurfaceY: -3.75
   maxFishCount: 30
-  spawnInterval: 3
+  spawnInterval: 2
 --- !u!114 &69493307
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4332,7 +4332,7 @@ GameObject:
   - component: {fileID: 1721393593}
   - component: {fileID: 1721393594}
   m_Layer: 0
-  m_Name: Cube (5)
+  m_Name: Hook
   m_TagString: Hook
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -4872,6 +4872,11 @@ PrefabInstance:
         type: 3}
       propertyPath: hookFollowSpeed
       value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 3973668979630334273, guid: 257f9f09ec1cf4240b175641a456adfd,
+        type: 3}
+      propertyPath: m_Name
+      value: RodTip
       objectReference: {fileID: 0}
     - target: {fileID: 4359791766550691380, guid: 257f9f09ec1cf4240b175641a456adfd,
         type: 3}
