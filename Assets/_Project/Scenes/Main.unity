@@ -3294,6 +3294,8 @@ MonoBehaviour:
   Gravity: {x: 0, y: -9.81, z: 0}
   Iterations: 1000
   LerpSpeed: 1.5
+  waterSurfaceY: -2
+  enableWaterSurface: 1
 --- !u!120 &1081114341
 LineRenderer:
   serializedVersion: 2
