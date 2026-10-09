@@ -16,14 +16,19 @@ public class FishCube : NetworkBehaviour
 
     [Header("UI del Pez")]
     [SerializeField] private FishTimerUI timerUI;
+    [SerializeField] private FishMinigameUI minigameUI;
     [SerializeField] private float uiHeightOffset = 3.5f;
 
     [Header("Configuracion de Mordida y Lucha")]
-    [SerializeField] private float biteDistance = 2.0f;
+    [SerializeField] private float biteDistance = 2.25f;
     [SerializeField] private float turnDuration = 2.0f;
-    [SerializeField] private int totalTurns = 5;
-    [SerializeField] private float evasiveDistance = 25.0f;
+    [SerializeField] private float evasiveDistance = 30.0f;
     [SerializeField] private FishAlive.SwimConfig swimAgileConfig;
+
+    [Header("Mecanica Wii / Teclado")]
+    [SerializeField] private int totalTurns = 6;
+    [SerializeField] private int requiredSuccesses = 4;
+    private int successfulFollows = 0;
 
     [Header("Debug")]
     [SerializeField] private bool showDebug = false;
@@ -153,6 +158,7 @@ public class FishCube : NetworkBehaviour
         isFighting = true;
         targetHook = hook;
         playerTransform = player;
+        successfulFollows = 0;
 
         if (evasiveTargetObject == null)
         {
@@ -177,6 +183,8 @@ public class FishCube : NetworkBehaviour
 
         for (int i = 0; i < totalTurns; i++)
         {
+            int expectedDirection = currentSide > 0 ? 1 : -1;
+
             if (playerTransform != null && fishMotion != null)
             {
                 float angleOffset = Random.Range(70f, 90f) * currentSide;
@@ -188,19 +196,55 @@ public class FishCube : NetworkBehaviour
 
                 fishMotion.StartTurnTowardsTarget(targetPos, abortExisting: true, turnVelocityMultiplier: 1.0f);
 
+                if (minigameUI != null)
+                {
+                    minigameUI.ShowDirection(expectedDirection);
+                }
+
                 if (showDebug)
                 {
-                    string lado = currentSide > 0 ? "DERECHA" : "IZQUIERDA";
-                    Debug.Log($"[LUCHA] Tirón {i + 1}/{totalTurns} hacia la {lado} | Posición Objetivo: {targetPos}");
+                    string ladoStr = expectedDirection > 0 ? "DERECHA [Pulsar D / Flecha Derecha]" : "IZQUIERDA [Pulsar A / Flecha Izquierda]";
+                    Debug.Log($"[LUCHA] Tiron {i + 1}/{totalTurns} hacia la {ladoStr}");
                 }
             }
+            
+            bool matchedThisTurn = false;
+            float turnTimer = 0f;
 
-            yield return new WaitForSeconds(turnDuration);
+            while (turnTimer < turnDuration)
+            {
+                turnTimer += Time.deltaTime;
+
+                float playerInput = GetPlayerHorizontalInput();
+
+                if (!matchedThisTurn && Mathf.Abs(playerInput) > 0.1f)
+                {
+                    int inputDir = playerInput > 0 ? 1 : -1;
+                    if (inputDir == expectedDirection)
+                    {
+                        matchedThisTurn = true;
+                    }
+                }
+
+                yield return null;
+            }
+
+            if (matchedThisTurn)
+            {
+                successfulFollows++;
+                if (showDebug) Debug.Log($"--> CORRECTO Aciertos: {successfulFollows}/{requiredSuccesses}");
+                if (minigameUI != null) minigameUI.ShowFeedback(true);
+            }
+            else
+            {
+                if (showDebug) Debug.Log($"--> FALLO No se siguio el movimiento a tiempo.");
+                if (minigameUI != null) minigameUI.ShowFeedback(false);
+            }
+
+            yield return new WaitForSeconds(0.4f);
 
             currentSide *= -1f;
         }
-
-        if (showDebug) Debug.Log("[LUCHA] Fin de la lucha. Pez agotado, enganchando.");
 
         isFighting = false;
 
@@ -209,7 +253,55 @@ public class FishCube : NetworkBehaviour
             Destroy(evasiveTargetObject);
         }
 
-        HookMe(hook, player);
+        bool isVictory = successfulFollows >= requiredSuccesses;
+
+        if (minigameUI != null)
+        {
+            minigameUI.ShowFinalResult(isVictory);
+        }
+
+        if (isVictory)
+        {
+            if (showDebug) Debug.Log($"[VICTORIA] {successfulFollows}/{totalTurns} aciertos. Pez capturado.");
+            HookMe(hook, player);
+        }
+        else
+        {
+            if (showDebug) Debug.Log($"[DERROTA] Solo {successfulFollows}/{totalTurns} aciertos (se requerian {requiredSuccesses}). El pez escapó.");
+            EscapeAndDespawn();
+        }
+    }
+
+    private float GetPlayerHorizontalInput()
+    {
+        float keyboardInput = Input.GetAxisRaw("Horizontal");
+
+        if (Mathf.Abs(keyboardInput) > 0.1f)
+        {
+            return Mathf.Sign(keyboardInput);
+        }
+
+        // CONECTAR WII AQUI
+        // if (WiiManager.Instance != null && WiiManager.Instance.IsConnected)
+        // {
+        //     return WiiManager.Instance.GetTiltDirection(); // debe devolver -1.0f o 1.0f
+        // }
+
+        return 0f;
+    }
+
+    private void EscapeAndDespawn()
+    {
+        isHooked = false;
+        isApproaching = false;
+        isFighting = false;
+
+        if (fishMotion != null)
+        {
+            fishMotion.SetReachMode(FishAlive.ReachMode.Wander);
+        }
+
+        DespawnFish();
     }
 
     private Vector3 CalculateEvasivePosition(float angleOffsetDegrees, float distance, float fixedY)

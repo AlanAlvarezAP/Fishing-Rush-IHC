@@ -30,8 +30,8 @@ public class ThirdPController : NetworkBehaviour
 
     public Animator animator;
     private CharacterInputController cinput;
-    float _inputForward = 0f;
-    float _inputTurn = 0f;
+    //float _inputForward = 0f;
+    //float _inputTurn = 0f;
     public float speedChangeRate = 0.1f;
     private float currentVelY = 0f;
     private float targetVelY = 0f;
@@ -52,7 +52,7 @@ public class ThirdPController : NetworkBehaviour
     [Header("Ajustes de Animacion y Cuelgue")]
     [SerializeField] private float castDelay = 1.75f;
     [SerializeField] private float reelSpeed = 15f;
-    [SerializeField] private float reelArcHeight = 2.5f;
+    //[SerializeField] private float reelArcHeight = 2.5f;
     [SerializeField] private float hangDistance = 0.4f;
     [SerializeField] private float hookFollowSpeed = 12f;
 
