@@ -1,15 +1,19 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
 
 public class FishCube : NetworkBehaviour
 {
+    public enum FishingGesture { None, Horizontal, Vertical, Circle, Cross }
+
     private bool isHooked = false;
     private bool isApproaching = false;
     private bool isFighting = false;
 
     private Transform targetHook;
     private Transform playerTransform;
+    private ThirdPController cachedPlayerController;
 
     private float lifeTimer = 0f;
     public float maxLifeTime = 90f;
@@ -20,18 +24,19 @@ public class FishCube : NetworkBehaviour
     [SerializeField] private float uiHeightOffset = 3.5f;
 
     [Header("Configuracion de Mordida y Lucha")]
+    [SerializeField] private float detectionRadius = 12.0f;
     [SerializeField] private float biteDistance = 2.25f;
-    [SerializeField] private float turnDuration = 2.0f;
+    [SerializeField] private float turnDuration = 3.0f;
     [SerializeField] private float evasiveDistance = 30.0f;
     [SerializeField] private FishAlive.SwimConfig swimAgileConfig;
 
-    [Header("Mecanica Wii / Teclado")]
-    [SerializeField] private int totalTurns = 6;
-    [SerializeField] private int requiredSuccesses = 4;
+    [Header("Mecanica de Gestos")]
+    [SerializeField] private int totalTurns = 4;
+    [SerializeField] private int requiredSuccesses = 3;
     private int successfulFollows = 0;
 
     [Header("Debug")]
-    [SerializeField] private bool showDebug = false;
+    [SerializeField] private bool showDebug = true;
 
     private FishAlive.FishMotion fishMotion;
     private GameObject evasiveTargetObject;
@@ -41,12 +46,52 @@ public class FishCube : NetworkBehaviour
         fishMotion = GetComponentInChildren<FishAlive.FishMotion>();
     }
 
-    private void OnDestroy()
+    private FishMinigameUI GetMinigameUI()
     {
+        if (minigameUI != null) return minigameUI;
+
+        if (FishMinigameUI.Instance != null)
+        {
+            minigameUI = FishMinigameUI.Instance;
+        }
+        else
+        {
+            minigameUI = FindObjectOfType<FishMinigameUI>();
+        }
+
+        return minigameUI;
+    }
+
+    public override void OnDestroy()
+    {
+        base.OnDestroy();
+
+        if (isApproaching || isFighting || isHooked)
+        {
+            if (cachedPlayerController != null)
+            {
+                cachedPlayerController.isHookOccupied = false;
+                cachedPlayerController.currentRequestedGesture = FishingGesture.None;
+            }
+        }
+
         if (evasiveTargetObject != null)
         {
             Destroy(evasiveTargetObject);
         }
+    }
+
+    private ThirdPController GetControllerFromHook(Transform hook)
+    {
+        if (cachedPlayerController != null) return cachedPlayerController;
+        if (hook == null) return null;
+
+        cachedPlayerController = hook.GetComponentInParent<ThirdPController>();
+        if (cachedPlayerController == null)
+        {
+            cachedPlayerController = FindObjectOfType<ThirdPController>();
+        }
+        return cachedPlayerController;
     }
 
     void Update()
@@ -66,31 +111,32 @@ public class FishCube : NetworkBehaviour
                 return;
             }
 
-            if (isApproaching && targetHook != null && fishMotion != null)
+            if (!isApproaching)
             {
-                float distToHook = Vector3.Distance(fishMotion.transform.position, targetHook.position);
+                CheckForNearbyHook();
+            }
+            else if (isApproaching)
+            {
+                ThirdPController playerController = GetControllerFromHook(targetHook);
 
-                if (Time.frameCount % 15 == 0)
+                if (playerController == null || !playerController.CanKeepApproaching())
                 {
-                    Debug.Log($"[APROXIMANDO] Distancia actual al anzuelo: {distToHook:F2}m | Requerida: {biteDistance:F2}m");
+                    AbortApproach(playerController);
                 }
-
-                if (distToHook <= biteDistance)
+                else if (targetHook != null && fishMotion != null)
                 {
-                    Debug.Log("Pez mordio el anzuelo! Iniciando EvasiveFightRoutine...");
-                    ThirdPController playerController = FindObjectOfType<ThirdPController>();
-                    Transform playerTr = playerController != null ? playerController.transform : null;
+                    float distToHook = Vector3.Distance(fishMotion.transform.position, targetHook.position);
 
-                    StartCoroutine(EvasiveFightRoutine(targetHook, playerTr));
+                    if (distToHook <= biteDistance)
+                    {
+                        StartCoroutine(EvasiveFightRoutine(targetHook, playerController.transform, playerController));
+                    }
                 }
             }
         }
         else if (isFighting)
         {
-            if (targetHook != null && fishMotion != null)
-            {
-                targetHook.position = fishMotion.transform.position;
-            }
+            // El objetivo se mueve evasivamente en EvasiveFightRoutine
         }
         else if (isHooked)
         {
@@ -127,6 +173,14 @@ public class FishCube : NetworkBehaviour
                             {
                                 FishingCounterManager.Instance.AddFish();
                             }
+
+                            ThirdPController playerController = GetControllerFromHook(targetHook);
+                            if (playerController != null)
+                            {
+                                playerController.isHookOccupied = false;
+                                playerController.currentRequestedGesture = FishingGesture.None;
+                            }
+
                             DespawnFish();
                         }
                     }
@@ -135,14 +189,59 @@ public class FishCube : NetworkBehaviour
         }
     }
 
+    private void CheckForNearbyHook()
+    {
+        ThirdPController playerController = FindObjectOfType<ThirdPController>();
+        if (playerController != null && playerController.CanFishBite())
+        {
+            GameObject hookObj = GameObject.FindWithTag("Hook");
+            if (hookObj == null) hookObj = playerController.fishingRod;
+
+            if (hookObj != null)
+            {
+                Vector3 currentPos = fishMotion != null ? fishMotion.transform.position : transform.position;
+                float dist = Vector3.Distance(currentPos, hookObj.transform.position);
+
+                if (dist <= detectionRadius)
+                {
+                    playerController.isHookOccupied = true;
+                    targetHook = hookObj.transform;
+                    isApproaching = true;
+
+                    if (fishMotion != null)
+                    {
+                        fishMotion.target = hookObj;
+                        fishMotion.SetReachMode(FishAlive.ReachMode.Position);
+                        fishMotion.PingTarget();
+                    }
+                }
+            }
+        }
+    }
+
+    private void AbortApproach(ThirdPController pc)
+    {
+        isApproaching = false;
+        targetHook = null;
+
+        if (pc != null)
+        {
+            pc.isHookOccupied = false;
+            pc.currentRequestedGesture = FishingGesture.None;
+        }
+
+        if (fishMotion != null)
+        {
+            fishMotion.SetReachMode(FishAlive.ReachMode.Wander);
+        }
+    }
+
     private void LateUpdate()
     {
         if (timerUI != null && timerUI.gameObject.activeSelf && fishMotion != null)
         {
             Vector3 fishPos = fishMotion.transform.position;
-
             float fixedY = transform.position.y + uiHeightOffset;
-
             timerUI.transform.position = new Vector3(fishPos.x, fixedY, fishPos.z);
 
             if (Camera.main != null)
@@ -152,13 +251,18 @@ public class FishCube : NetworkBehaviour
         }
     }
 
-    private IEnumerator EvasiveFightRoutine(Transform hook, Transform player)
+    private IEnumerator EvasiveFightRoutine(Transform hook, Transform player, ThirdPController playerController)
     {
         isApproaching = false;
         isFighting = true;
         targetHook = hook;
         playerTransform = player;
         successfulFollows = 0;
+
+        if (playerController != null)
+        {
+            playerController.isHookOccupied = true;
+        }
 
         if (evasiveTargetObject == null)
         {
@@ -179,50 +283,70 @@ public class FishCube : NetworkBehaviour
             fishMotion.SetReachMode(FishAlive.ReachMode.Position);
         }
 
-        float currentSide = Random.value > 0.5f ? 1f : -1f; 
+        FishMinigameUI ui = GetMinigameUI();
 
         for (int i = 0; i < totalTurns; i++)
         {
-            int expectedDirection = currentSide > 0 ? 1 : -1;
+            if (playerController == null || !playerController.isFishing)
+            {
+                if (playerController != null)
+                {
+                    playerController.isHookOccupied = false;
+                    playerController.currentRequestedGesture = FishingGesture.None;
+                }
+                EscapeAndDespawn();
+                yield break;
+            }
+
+            FishingGesture expectedGesture = (FishingGesture)Random.Range(1, 5);
+
+            if (playerController != null)
+            {
+                playerController.currentRequestedGesture = expectedGesture;
+                playerController.TriggerRumble(0.3f);
+            }
 
             if (playerTransform != null && fishMotion != null)
             {
-                float angleOffset = Random.Range(70f, 90f) * currentSide;
+                float angleOffset = Random.Range(-90f, 90f);
                 Vector3 targetPos = CalculateEvasivePosition(angleOffset, evasiveDistance, fixedWaterY);
                 evasiveTargetObject.transform.position = targetPos;
 
                 fishMotion.target = evasiveTargetObject;
                 fishMotion.PingTarget();
-
                 fishMotion.StartTurnTowardsTarget(targetPos, abortExisting: true, turnVelocityMultiplier: 1.0f);
 
-                if (minigameUI != null)
-                {
-                    minigameUI.ShowDirection(expectedDirection);
-                }
+                if (showDebug) Debug.LogWarning($"¡Capturar el pez!\nPatrón: {expectedGesture}");
 
-                if (showDebug)
+                if (ui != null)
                 {
-                    string ladoStr = expectedDirection > 0 ? "DERECHA [Pulsar D / Flecha Derecha]" : "IZQUIERDA [Pulsar A / Flecha Izquierda]";
-                    Debug.Log($"[LUCHA] Tiron {i + 1}/{totalTurns} hacia la {ladoStr}");
+                    ui.ShowDirection((int)expectedGesture);
+                    ui.UpdatePatternText(expectedGesture, i + 1, totalTurns);
                 }
             }
-            
+
             bool matchedThisTurn = false;
             float turnTimer = 0f;
+
+            if (playerController != null) playerController.ClearGestureWindow();
 
             while (turnTimer < turnDuration)
             {
                 turnTimer += Time.deltaTime;
 
-                float playerInput = GetPlayerHorizontalInput();
-
-                if (!matchedThisTurn && Mathf.Abs(playerInput) > 0.1f)
+                if (!matchedThisTurn)
                 {
-                    int inputDir = playerInput > 0 ? 1 : -1;
-                    if (inputDir == expectedDirection)
+                    bool gestureDone = false;
+
+                    if (playerController != null)
+                        gestureDone = playerController.ValidateSpecificGesture(expectedGesture);
+                    else
+                        gestureDone = CheckKeyboardFallback(expectedGesture);
+
+                    if (gestureDone)
                     {
                         matchedThisTurn = true;
+                        if (playerController != null) playerController.ClearGestureWindow();
                     }
                 }
 
@@ -232,21 +356,24 @@ public class FishCube : NetworkBehaviour
             if (matchedThisTurn)
             {
                 successfulFollows++;
-                if (showDebug) Debug.Log($"--> CORRECTO Aciertos: {successfulFollows}/{requiredSuccesses}");
-                if (minigameUI != null) minigameUI.ShowFeedback(true);
+                if (showDebug) Debug.Log($"--> ¡ÉXITO! Gesto correcto.");
+                if (ui != null) ui.ShowFeedback(true);
             }
             else
             {
-                if (showDebug) Debug.Log($"--> FALLO No se siguio el movimiento a tiempo.");
-                if (minigameUI != null) minigameUI.ShowFeedback(false);
+                if (showDebug) Debug.Log($"--> FALLO: El tiempo se agotó.");
+                if (ui != null) ui.ShowFeedback(false);
             }
 
             yield return new WaitForSeconds(0.4f);
-
-            currentSide *= -1f;
         }
 
         isFighting = false;
+
+        if (playerController != null)
+        {
+            playerController.currentRequestedGesture = FishingGesture.None;
+        }
 
         if (evasiveTargetObject != null)
         {
@@ -255,9 +382,9 @@ public class FishCube : NetworkBehaviour
 
         bool isVictory = successfulFollows >= requiredSuccesses;
 
-        if (minigameUI != null)
+        if (ui != null)
         {
-            minigameUI.ShowFinalResult(isVictory);
+            ui.ShowFinalResult(isVictory);
         }
 
         if (isVictory)
@@ -267,27 +394,28 @@ public class FishCube : NetworkBehaviour
         }
         else
         {
-            if (showDebug) Debug.Log($"[DERROTA] Solo {successfulFollows}/{totalTurns} aciertos (se requerian {requiredSuccesses}). El pez escapó.");
+            if (showDebug) Debug.Log($"[DERROTA] Solo {successfulFollows}/{totalTurns} aciertos. El pez escapó.");
+
+            if (playerController != null)
+            {
+                playerController.isHookOccupied = false;
+                playerController.currentRequestedGesture = FishingGesture.None;
+            }
+
             EscapeAndDespawn();
         }
     }
 
-    private float GetPlayerHorizontalInput()
+    private bool CheckKeyboardFallback(FishingGesture expected)
     {
-        float keyboardInput = Input.GetAxisRaw("Horizontal");
-
-        if (Mathf.Abs(keyboardInput) > 0.1f)
+        switch (expected)
         {
-            return Mathf.Sign(keyboardInput);
+            case FishingGesture.Horizontal: return Input.GetAxisRaw("Horizontal") != 0;
+            case FishingGesture.Vertical: return Input.GetAxisRaw("Vertical") != 0;
+            case FishingGesture.Circle: return Input.GetKeyDown(KeyCode.O);
+            case FishingGesture.Cross: return Input.GetKeyDown(KeyCode.X);
         }
-
-        // CONECTAR WII AQUI
-        // if (WiiManager.Instance != null && WiiManager.Instance.IsConnected)
-        // {
-        //     return WiiManager.Instance.GetTiltDirection(); // debe devolver -1.0f o 1.0f
-        // }
-
-        return 0f;
+        return false;
     }
 
     private void EscapeAndDespawn()
@@ -314,7 +442,7 @@ public class FishCube : NetworkBehaviour
         Vector3 playerToFish = fishCurrentPos - playerTransform.position;
         playerToFish.y = 0f;
 
-        if (playerToFish == Vector3.zero) 
+        if (playerToFish == Vector3.zero)
         {
             playerToFish = playerTransform.forward;
             playerToFish.y = 0f;
@@ -327,24 +455,6 @@ public class FishCube : NetworkBehaviour
         targetPos.y = fixedY;
 
         return targetPos;
-    }
-
-    private void OnTriggerEnter(Collider other)
-    {
-        if (isHooked || isApproaching || isFighting) return;
-
-        if (other.CompareTag("Hook") || other.name.Contains("Hook"))
-        {
-            targetHook = other.transform;
-            isApproaching = true;
-
-            if (fishMotion != null)
-            {
-                fishMotion.target = other.gameObject;
-                fishMotion.SetReachMode(FishAlive.ReachMode.Position);
-                fishMotion.PingTarget();
-            }
-        }
     }
 
     private void DespawnFish()

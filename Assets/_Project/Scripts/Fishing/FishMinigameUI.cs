@@ -6,8 +6,11 @@ using TMPro;
 
 public class FishMinigameUI : MonoBehaviour
 {
+    public static FishMinigameUI Instance { get; private set; }
+
     [Header("Componentes UI")]
     [SerializeField] private Image arrowImage;
+    [SerializeField] private TextMeshProUGUI patternText;
     [SerializeField] private TextMeshProUGUI feedbackText;
     [SerializeField] private TextMeshProUGUI finalStatusText;
 
@@ -19,25 +22,59 @@ public class FishMinigameUI : MonoBehaviour
 
     private void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
+
         HideAll();
     }
 
     public void HideAll()
     {
         if (arrowImage != null) arrowImage.gameObject.SetActive(false);
+        if (patternText != null) patternText.gameObject.SetActive(false);
         if (feedbackText != null) feedbackText.gameObject.SetActive(false);
         if (finalStatusText != null) finalStatusText.gameObject.SetActive(false);
-        
+
         if (arrowAnimationCoroutine != null)
         {
             StopCoroutine(arrowAnimationCoroutine);
+            arrowAnimationCoroutine = null;
         }
+    }
+
+    /// <summary>
+    /// Muestra en el centro de la pantalla la ronda actual y el patrón a realizar.
+    /// </summary>
+    public void UpdatePatternText(FishCube.FishingGesture gesture, int currentTurn, int totalTurns)
+    {
+        HideAll();
+
+        if (!gameObject.activeSelf) gameObject.SetActive(true);
+        if (patternText == null) return;
+
+        patternText.gameObject.SetActive(true);
+
+        string gestureName = gesture switch
+        {
+            FishCube.FishingGesture.Horizontal => "HORIZONTAL",
+            FishCube.FishingGesture.Vertical => "VERTICAL",
+            FishCube.FishingGesture.Circle => "CIRCULO",
+            FishCube.FishingGesture.Cross => "CRUZ",
+            _ => gesture.ToString()
+        };
+
+        patternText.text = $"<size=70%><color=#DCDCDC>RONDA {currentTurn}/{totalTurns}</color></size>\n<b><size=120%><color=#FFCC00>¡MOVIMIENTO: {gestureName}!</color></size></b>";
     }
 
     public void ShowDirection(int direction)
     {
         HideAll();
 
+        if (!gameObject.activeSelf) gameObject.SetActive(true);
         if (arrowImage == null) return;
 
         arrowImage.gameObject.SetActive(true);
@@ -53,6 +90,7 @@ public class FishMinigameUI : MonoBehaviour
     {
         HideAll();
 
+        if (!gameObject.activeSelf) gameObject.SetActive(true);
         if (feedbackText == null) return;
 
         feedbackText.gameObject.SetActive(true);
@@ -66,6 +104,7 @@ public class FishMinigameUI : MonoBehaviour
     {
         HideAll();
 
+        if (!gameObject.activeSelf) gameObject.SetActive(true);
         if (finalStatusText == null) return;
 
         finalStatusText.gameObject.SetActive(true);

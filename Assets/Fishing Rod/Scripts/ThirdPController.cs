@@ -30,8 +30,6 @@ public class ThirdPController : NetworkBehaviour
 
     public Animator animator;
     private CharacterInputController cinput;
-    //float _inputForward = 0f;
-    //float _inputTurn = 0f;
     public float speedChangeRate = 0.1f;
     private float currentVelY = 0f;
     private float targetVelY = 0f;
@@ -41,6 +39,9 @@ public class ThirdPController : NetworkBehaviour
     public bool isFishing = false;
     public bool isReeling = false;
     public bool isCastingInProcess = false;
+
+    public bool isHookOccupied = false;
+    public FishCube.FishingGesture currentRequestedGesture = FishCube.FishingGesture.None;
 
     [Header("Referencias de Pesca")]
     public GameObject fishingRod;
@@ -52,7 +53,6 @@ public class ThirdPController : NetworkBehaviour
     [Header("Ajustes de Animacion y Cuelgue")]
     [SerializeField] private float castDelay = 1.75f;
     [SerializeField] private float reelSpeed = 15f;
-    //[SerializeField] private float reelArcHeight = 2.5f;
     [SerializeField] private float hangDistance = 0.4f;
     [SerializeField] private float hookFollowSpeed = 12f;
 
@@ -64,26 +64,26 @@ public class ThirdPController : NetworkBehaviour
     public float waterRippleAmount = 0.1f;
 
     [Header("Otros")]
-
     private VerletLine verletScript;
     private float currentMaxLineLength = 0.5f;
     private Rigidbody hookRb;
 
-    // Variables internas para el recojo parabólico
     private Vector3 reelStartPos;
     private float reelTotalDistance;
     private float reelProgress;
 
-    // --- VARIABLES MANDO WII & MÁQUINA DE ESTADOS DE LANZAMIENTO ---
-    // 0 = Reposo, 1 = Caña Levantada (Evaluando latigazo con Ventana)
     private int wiiCastState = 0;
     private float peakSwingForce = 0f;
     private float phase1Timer = 0f;
-    [SerializeField] private float phase1MaxTime = 1.5f; // Tiempo límite para lanzar tras preparar
+    [SerializeField] private float phase1MaxTime = 1.5f;
 
-    [Header("Configuracion de Ventana de Movimiento (Wii)")]
+    [Header("Configuracion de Ventana de Movimiento (Wii Lanzamiento)")]
     public int windowSize = 25;
     private Queue<float> movementWindow = new Queue<float>();
+
+    [Header("Ventana de Gestos (Lucha / Minijuego)")]
+    private Queue<Vector2> gestureWindow = new Queue<Vector2>();
+    public int gestureWindowSize = 40;
 
     [Header("Umbrales de Fuerza (Latigazo Dinamico)")]
     public float umbralMinimo = 0.6f;
@@ -102,20 +102,19 @@ public class ThirdPController : NetworkBehaviour
     private float debugCalculatedForce = 12f;
     private string debugState = "Iniciando...";
 
+    public bool CanFishBite()
+    {
+        return isFishing && alreadyCast && !isReeling && !isCastingInProcess && !isHookOccupied;
+    }
+
+    public bool CanKeepApproaching()
+    {
+        return isFishing && alreadyCast && !isReeling && !isCastingInProcess;
+    }
+
     void Start()
     {
         controller = GetComponent<CharacterController>();
-	/*
-        if (animator != null) animator.SetBool("startFishing", false);
-        if (fishingRod != null) fishingRod.SetActive(false);
-
-        if (lineObject != null) lineObject.SetActive(false);
-        if (hookObject != null) hookObject.SetActive(false);
-
-        if (camera == null && Camera.main != null)
-            camera = Camera.main.transform;
-	*/
-
         Cursor.lockState = CursorLockMode.Locked;
         cinput = GetComponent<CharacterInputController>();
         animator.SetBool("startFishing", false);
@@ -140,10 +139,6 @@ public class ThirdPController : NetworkBehaviour
 
             SetHookKinematic(true);
             hookObject.SetActive(false);
-	    /*
-        if (lineObject != null) lineObject.SetActive(false);
-        if (hookObject != null) hookObject.SetActive(false);
-        */
         }
     }
 
@@ -194,7 +189,6 @@ public class ThirdPController : NetworkBehaviour
         {
             Wiimote wiimote = WiimoteManager.Wiimotes[0];
 
-            // Vaciar el buffer del Wiimote en cada frame para tener 0 latencia y datos frescos
             int ret;
             do
             {
@@ -205,25 +199,25 @@ public class ThirdPController : NetworkBehaviour
 
             if (accel != null && accel.Length >= 3)
             {
-                float accelZ = accel[2]; // Z es el eje longitudinal
-
-                // Magnitud pura incluyendo gravedad para chequear posturas estáticas de preparación
+                float accelZ = accel[2];
                 float rawMag = new Vector3(accel[0], accel[1], accel[2]).magnitude;
-
-                // Aceleración dinámica real (restando 1G de gravedad estática) para evitar falsos positivos en movimientos lentos
                 float dynamicAccelMag = Mathf.Max(0f, rawMag - 1.0f);
 
                 debugAccelMag = dynamicAccelMag;
                 debugAccelY = accel[1];
 
-                // 1. MANTENER LA VENTANA ACTUALIZADA SIEMPRE CON ACELERACIÓN DINÁMICA
+                gestureWindow.Enqueue(new Vector2(accel[0], accel[1]));
+                if (gestureWindow.Count > gestureWindowSize)
+                {
+                    gestureWindow.Dequeue();
+                }
+
                 movementWindow.Enqueue(dynamicAccelMag);
                 if (movementWindow.Count > windowSize)
                 {
                     movementWindow.Dequeue();
                 }
 
-                // Solo procesamos el lanzamiento si estamos pescando y listos
                 if (!isFishing || alreadyCast || isCastingInProcess)
                 {
                     wiiCastState = 0;
@@ -231,54 +225,46 @@ public class ThirdPController : NetworkBehaviour
                 }
                 else
                 {
-                    // --- MÁQUINA DE ESTADOS CON VENTANA DE MOVIMIENTO ---
                     switch (wiiCastState)
                     {
-                        case 0: // FASE 0: ESPERANDO QUE LEVANTE LA CAÑA
+                        case 0:
                             if (Mathf.Abs(accelZ) > 0.88f && Mathf.Abs(accel[1]) < 0.35f && rawMag > 0.8f && rawMag < 1.2f)
                             {
                                 wiiCastState = 1;
                                 peakSwingForce = 0f;
                                 phase1Timer = 0f;
-                                movementWindow.Clear(); // Limpiamos para grabar el latigazo desde cero
+                                movementWindow.Clear();
                             }
                             break;
 
-                        case 1: // FASE 1: EVALUANDO LATIGAZO A TRAVÉS DE LA VENTANA
+                        case 1:
                             phase1Timer += Time.deltaTime;
 
-                            // Si se acaba el tiempo, cancelar
                             if (phase1Timer > phase1MaxTime)
                             {
                                 wiiCastState = 0;
                                 phase1Timer = 0f;
                             }
-                            // Evaluamos desde los primeros frames (ej. 5) para evitar puntos ciegos
                             else if (movementWindow.Count >= 5)
                             {
-                                // Buscar el pico máximo de aceleración dinámica en nuestra ventana actual
                                 float maxAccel = 0f;
                                 foreach (float val in movementWindow)
                                 {
                                     if (val > maxAccel) maxAccel = val;
                                 }
 
-                                peakSwingForce = maxAccel; // Lo guardamos para mostrar en el UI
+                                peakSwingForce = maxAccel;
 
-                                // Condición de soltado: El pico superó el umbral dinámico mínimo Y la aceleración empezó a caer
                                 if (maxAccel > umbralMinimo && dynamicAccelMag < maxAccel * 0.8f)
                                 {
                                     wiiCastTrigger = true;
-
-                                    // Variación real continua: Mapea la aceleración de forma fluida entre umbrales
                                     float t = Mathf.InverseLerp(umbralMinimo, umbralAlto, maxAccel);
                                     debugCalculatedForce = Mathf.Lerp(fuerzaBaja, fuerzaAlta, t);
 
                                     wiiCastState = 0;
                                     phase1Timer = 0f;
-                                    movementWindow.Clear(); // Evita que un mismo movimiento dispare 2 veces
+                                    movementWindow.Clear();
                                 }
-                                // Cancelación si el usuario vuelve a bajar la caña muy suavemente
                                 else if (Mathf.Abs(accelZ) < 0.4f && Mathf.Abs(accel[1]) > 0.7f && rawMag < 1.2f)
                                 {
                                     wiiCastState = 0;
@@ -290,7 +276,6 @@ public class ThirdPController : NetworkBehaviour
                 }
             }
 
-            // Lectura de Botones
             bool currentWiiB = wiimote.Button.b;
             if (currentWiiB && !wasWiiB) wiiEquipTrigger = true;
             wasWiiB = currentWiiB;
@@ -350,6 +335,8 @@ public class ThirdPController : NetworkBehaviour
             {
                 if (animator != null) animator.SetBool("startFishing", false);
                 isFishing = false;
+                isHookOccupied = false;
+                currentRequestedGesture = FishCube.FishingGesture.None;
                 if (fishingRod != null) fishingRod.SetActive(false);
                 if (lineObject != null) lineObject.SetActive(false);
                 if (hookObject != null) hookObject.SetActive(false);
@@ -387,23 +374,19 @@ public class ThirdPController : NetworkBehaviour
             if (hookObject != null && rodTip != null)
             {
                 Vector3 targetEndPos = rodTip.position + (Vector3.down * hangDistance);
-
                 float currentX = Mathf.Lerp(reelStartPos.x, targetEndPos.x, clampedProgress);
                 float currentZ = Mathf.Lerp(reelStartPos.z, targetEndPos.z, clampedProgress);
                 float currentY;
 
                 if (clampedProgress < liftThreshold)
                 {
-                    // FASE 1: Se arrastra en el agua con un bamboleo constante
                     float ripple = Mathf.Sin(Time.time * 20f) * waterRippleAmount;
                     currentY = waterSurfaceY + ripple;
                 }
                 else
                 {
-                    // FASE 2: Despegue del agua y elevación suave hasta la caña
                     float liftNormalized = (clampedProgress - liftThreshold) / (1f - liftThreshold);
                     float smoothLift = Mathf.SmoothStep(0f, 1f, liftNormalized);
-
                     currentY = Mathf.Lerp(waterSurfaceY, targetEndPos.y, smoothLift);
                 }
 
@@ -411,13 +394,6 @@ public class ThirdPController : NetworkBehaviour
 
                 if (hookRb != null) hookRb.position = finalPos;
                 else hookObject.transform.position = finalPos;
-
-                //Vector3 currentLinearPos = Vector3.Lerp(reelStartPos, targetEndPos, clampedProgress);
-                //float arc = Mathf.Sin(clampedProgress * Mathf.PI) * reelArcHeight;
-                //Vector3 finalPos = currentLinearPos + Vector3.up * arc;
-
-                //if (hookRb != null) hookRb.position = finalPos;
-                //else hookObject.transform.position = finalPos;
             }
 
             if (hookObject != null && rodTip != null)
@@ -468,36 +444,32 @@ public class ThirdPController : NetworkBehaviour
             }
         }
 
-            if (controller.isGrounded)
+        if (controller.isGrounded)
+        {
+            if (bhopEnabled)
             {
-                if (bhopEnabled)
-                {
-                    if (Input.GetButton("Jump") || wiiJumpHeld) Jump();
-                }
-                else
-                {
-                    if (Input.GetButtonDown("Jump") || wiiJumpDown) Jump();
-                }
-            }
-
-            currentVelY = Mathf.Lerp(currentVelY, targetVelY, speedChangeRate);
-            animator.SetFloat("velY", currentVelY);
-
-            
-            if (controller.isGrounded && playerVelocity.y < 0)
-            {
-                if (animator != null) animator.SetBool("isGrounded", true);
-                playerVelocity.y = -2f; // Mantener adherido firmemente al terreno
+                if (Input.GetButton("Jump") || wiiJumpHeld) Jump();
             }
             else
             {
-                playerVelocity.y += gravityFactor * gravity * Time.deltaTime;
+                if (Input.GetButtonDown("Jump") || wiiJumpDown) Jump();
             }
-            
+        }
 
-            //playerVelocity.y += gravityFactor * gravity * Time.deltaTime;
-            controller.Move(playerVelocity * Time.deltaTime);
-        //}
+        currentVelY = Mathf.Lerp(currentVelY, targetVelY, speedChangeRate);
+        animator.SetFloat("velY", currentVelY);
+
+        if (controller.isGrounded && playerVelocity.y < 0)
+        {
+            if (animator != null) animator.SetBool("isGrounded", true);
+            playerVelocity.y = -2f;
+        }
+        else
+        {
+            playerVelocity.y += gravityFactor * gravity * Time.deltaTime;
+        }
+
+        controller.Move(playerVelocity * Time.deltaTime);
     }
 
     private IEnumerator ExecuteCastWithDelay(float force)
@@ -507,6 +479,8 @@ public class ThirdPController : NetworkBehaviour
 
         isCastingInProcess = false;
         alreadyCast = true;
+        isHookOccupied = false;
+        currentRequestedGesture = FishCube.FishingGesture.None;
 
         if (hookObject != null && rodTip != null)
         {
@@ -526,6 +500,8 @@ public class ThirdPController : NetworkBehaviour
     {
         animator.SetTrigger("reel");
         isReeling = true;
+        isHookOccupied = false;
+        currentRequestedGesture = FishCube.FishingGesture.None;
 
         if (hookObject != null && rodTip != null)
         {
@@ -542,6 +518,8 @@ public class ThirdPController : NetworkBehaviour
     {
         alreadyCast = false;
         isReeling = false;
+        isHookOccupied = false;
+        currentRequestedGesture = FishCube.FishingGesture.None;
 
         if (hookObject != null && rodTip != null)
         {
@@ -586,7 +564,6 @@ public class ThirdPController : NetworkBehaviour
         }
         else if (alreadyCast && !isReeling && hookObject != null && rodTip != null)
         {
-            // --- FLOTACIÓN Y FRENO EN LA SUPERFICIE DEL AGUA ---
             if (hookRb != null && !hookRb.isKinematic)
             {
                 if (hookObject.transform.position.y <= waterSurfaceY)
@@ -660,6 +637,36 @@ public class ThirdPController : NetworkBehaviour
         }
     }
 
+    // --- SISTEMA DE VIBRACIÓN DEL MANDO DE WII ---
+    public void TriggerRumble(float duration)
+    {
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR
+        if (WiimoteManager.HasWiimote() && WiimoteManager.Wiimotes.Count > 0)
+        {
+            StartCoroutine(RumbleRoutine(duration));
+        }
+#endif
+    }
+
+    private IEnumerator RumbleRoutine(float duration)
+    {
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR
+        if (WiimoteManager.HasWiimote() && WiimoteManager.Wiimotes.Count > 0)
+        {
+            Wiimote wiimote = WiimoteManager.Wiimotes[0];
+            wiimote.RumbleOn = true;
+            wiimote.SendStatusInfoRequest();
+
+            yield return new WaitForSeconds(duration);
+
+            wiimote.RumbleOn = false;
+            wiimote.SendStatusInfoRequest();
+        }
+#else
+        yield return null;
+#endif
+    }
+
     void OnGUI()
     {
         if (!IsOwner) return;
@@ -672,8 +679,14 @@ public class ThirdPController : NetworkBehaviour
         style.normal.textColor = Color.yellow;
         style.fontStyle = FontStyle.Bold;
 
-        float boxWidth = 260f;
-        float boxHeight = 150f;
+        GUIStyle styleLock = new GUIStyle(style);
+        styleLock.normal.textColor = isHookOccupied ? Color.red : Color.green;
+
+        GUIStyle styleGesture = new GUIStyle(style);
+        styleGesture.normal.textColor = Color.cyan;
+
+        float boxWidth = 280f;
+        float boxHeight = 185f;
         float posX = 10f;
         float posY = Screen.height - boxHeight - 10f;
 
@@ -682,8 +695,9 @@ public class ThirdPController : NetworkBehaviour
         GUILayout.BeginArea(new Rect(posX + 10, posY + 10, boxWidth - 20, boxHeight - 20));
         GUILayout.Label("- DEBUG WII FISHING -", style);
         GUILayout.Label("Estado: " + debugState, style);
+        GUILayout.Label("Anzuelo Ocupado: " + (isHookOccupied ? "SÍ (BLOQUEADO)" : "NO (LIBRE)"), styleLock);
+        GUILayout.Label("Gesto Solicitado: " + currentRequestedGesture.ToString(), styleGesture);
 
-        // Muestra el contador en regresiva cuando estás en la Fase 1
         if (wiiCastState == 1)
         {
             float timeLeft = Mathf.Max(0f, phase1MaxTime - phase1Timer);
@@ -700,5 +714,62 @@ public class ThirdPController : NetworkBehaviour
 
         GUILayout.EndArea();
 #endif
+    }
+
+    public void ClearGestureWindow()
+    {
+        gestureWindow.Clear();
+    }
+
+    public bool ValidateSpecificGesture(FishCube.FishingGesture expectedGesture)
+    {
+        if (gestureWindow.Count < 15) return false;
+
+        float minX = 999f, maxX = -999f, minY = 999f, maxY = -999f;
+        int zeroCrossesX = 0, zeroCrossesY = 0;
+        Vector2 prev = Vector2.zero;
+        bool first = true;
+
+        foreach (Vector2 val in gestureWindow)
+        {
+            if (val.x < minX) minX = val.x;
+            if (val.x > maxX) maxX = val.x;
+            if (val.y < minY) minY = val.y;
+            if (val.y > maxY) maxY = val.y;
+
+            if (!first)
+            {
+                if (Mathf.Sign(val.x) != Mathf.Sign(prev.x)) zeroCrossesX++;
+                if (Mathf.Sign(val.y) != Mathf.Sign(prev.y)) zeroCrossesY++;
+            }
+            prev = val;
+            first = false;
+        }
+
+        float varX = maxX - minX;
+        float varY = maxY - minY;
+
+        if (zeroCrossesX > 8 || zeroCrossesY > 8)
+        {
+            return false;
+        }
+
+        switch (expectedGesture)
+        {
+            case FishCube.FishingGesture.Horizontal:
+                return varX > 0.65f && varX > varY * 1.4f;
+
+            case FishCube.FishingGesture.Vertical:
+                return varY > 0.65f && varY > varX * 1.4f;
+
+            case FishCube.FishingGesture.Circle:
+                bool isBalanced = Mathf.Abs(varX - varY) < 0.6f;
+                return varX > 0.55f && varY > 0.55f && isBalanced && zeroCrossesX <= 4 && zeroCrossesY <= 4;
+
+            case FishCube.FishingGesture.Cross:
+                return varX > 0.7f && varY > 0.7f && (zeroCrossesX >= 2 || zeroCrossesY >= 2);
+        }
+
+        return false;
     }
 }
