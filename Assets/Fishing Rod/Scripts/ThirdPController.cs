@@ -43,6 +43,13 @@ public class ThirdPController : NetworkBehaviour
     public bool isHookOccupied = false;
     public FishCube.FishingGesture currentRequestedGesture = FishCube.FishingGesture.None;
 
+    private NetworkVariable<Vector3> netHookPos = new NetworkVariable<Vector3>(
+        Vector3.zero, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner
+    );
+    private NetworkVariable<Quaternion> netHookRot = new NetworkVariable<Quaternion>(
+        Quaternion.identity, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner
+    );
+
     [Header("Referencias de Pesca")]
     public GameObject fishingRod;
     [SerializeField] private GameObject lineObject;
@@ -315,10 +322,11 @@ public class ThirdPController : NetworkBehaviour
                 targetVelY = 0f;
                 if (animator != null) animator.SetFloat("velY", 0f);
 
+                Vector3 initPos = rodTip != null ? rodTip.position + (Vector3.down * hangDistance) : transform.position;
+                Quaternion initRot = rodTip != null ? rodTip.rotation : transform.rotation;
+
                 if (hookObject != null && rodTip != null)
                 {
-                    Vector3 initPos = rodTip.position + (Vector3.down * hangDistance);
-
                     if (hookRb != null && !hookRb.isKinematic)
                     {
                         hookRb.velocity = Vector3.zero;
@@ -352,6 +360,8 @@ public class ThirdPController : NetworkBehaviour
                 if (lineObject != null) lineObject.SetActive(true);
                 if (hookObject != null) hookObject.SetActive(true);
                 if (verletScript != null) verletScript.ResetRope();
+
+                SetFishingVisualsClientRpc(true, initPos, initRot);
             }
             else if (isFishing && !alreadyCast && !isReeling && !isCastingInProcess)
             {
@@ -362,6 +372,7 @@ public class ThirdPController : NetworkBehaviour
                 if (fishingRod != null) fishingRod.SetActive(false);
                 if (lineObject != null) lineObject.SetActive(false);
                 if (hookObject != null) hookObject.SetActive(false);
+                SetFishingVisualsClientRpc(false, Vector3.zero, Quaternion.identity);
             }
         }
 
@@ -507,6 +518,8 @@ public class ThirdPController : NetworkBehaviour
         if (hookObject != null && rodTip != null)
         {
             SetHookKinematic(false);
+            //SetHookKinematicClientRpc(false);
+
             if (hookRb != null)
             {
                 hookRb.velocity = Vector3.zero;
@@ -557,6 +570,8 @@ public class ThirdPController : NetworkBehaviour
 
     private void FixedUpdate()
     {
+        if (!IsOwner) return;
+
         if (!isFishing) return;
 
         if ((!alreadyCast || isCastingInProcess) && !isReeling)
@@ -819,6 +834,41 @@ public class ThirdPController : NetworkBehaviour
             if (fishingRod != null) fishingRod.SetActive(true);
             if (lineObject != null) lineObject.SetActive(true);
             if (hookObject != null) hookObject.SetActive(true);
+        }
+    }
+
+    [ClientRpc]
+    private void SetFishingVisualsClientRpc(bool active, Vector3 hookPos, Quaternion hookRot)
+    {
+        if (IsOwner) return; 
+
+        if (hookObject != null)
+        {
+            SetHookKinematic(true);
+            hookObject.transform.SetPositionAndRotation(hookPos, hookRot);
+            hookObject.SetActive(active);
+        }
+
+        if (fishingRod != null) fishingRod.SetActive(active);
+        if (lineObject != null) lineObject.SetActive(active);
+        if (verletScript != null && active) verletScript.ResetRope();
+    }
+
+    void LateUpdate()
+    {
+        if (!IsSpawned || hookObject == null || !hookObject.activeSelf) return;
+
+        if (IsOwner)
+        {
+            netHookPos.Value = hookObject.transform.position;
+            netHookRot.Value = hookObject.transform.rotation;
+        }
+        else
+        {
+            float t = 1f - Mathf.Exp(-20f * Time.deltaTime);
+            Vector3 p = Vector3.Lerp(hookObject.transform.position, netHookPos.Value, t);
+            Quaternion r = Quaternion.Slerp(hookObject.transform.rotation, netHookRot.Value, t);
+            hookObject.transform.SetPositionAndRotation(p, r);
         }
     }
 }
