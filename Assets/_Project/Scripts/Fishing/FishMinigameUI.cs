@@ -6,7 +6,7 @@ using TMPro;
 
 public class FishMinigameUI : MonoBehaviour
 {
-    public static FishMinigameUI Instance { get; private set; }
+    //public static FishMinigameUI Instance { get; private set; }
 
     [Header("Componentes UI")]
     [SerializeField] private Image arrowImage;
@@ -22,12 +22,12 @@ public class FishMinigameUI : MonoBehaviour
 
     private void Awake()
     {
-        if (Instance != null && Instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
-        Instance = this;
+        //if (Instance != null && Instance != this)
+        //{
+        //    Destroy(gameObject);
+        //    return;
+        //}
+        //Instance = this;
 
         HideAll();
     }
@@ -46,9 +46,6 @@ public class FishMinigameUI : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Muestra en el centro de la pantalla la ronda actual y el patrón a realizar.
-    /// </summary>
     public void UpdatePatternText(FishCube.FishingGesture gesture, int currentTurn, int totalTurns)
     {
         HideAll();
@@ -67,7 +64,7 @@ public class FishMinigameUI : MonoBehaviour
             _ => gesture.ToString()
         };
 
-        patternText.text = $"<size=70%><color=#DCDCDC>RONDA {currentTurn}/{totalTurns}</color></size>\n<b><size=120%><color=#FFCC00>¡MOVIMIENTO: {gestureName}!</color></size></b>";
+        patternText.text = $"<size=70%><color=#DCDCDC>RONDA {currentTurn}/{totalTurns}</color></size>\n<b><size=120%><color=#FFCC00>ï¿½MOVIMIENTO: {gestureName}!</color></size></b>";
     }
 
     public void ShowDirection(int direction)
