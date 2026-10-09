@@ -318,11 +318,33 @@ public class ThirdPController : NetworkBehaviour
                 if (hookObject != null && rodTip != null)
                 {
                     Vector3 initPos = rodTip.position + (Vector3.down * hangDistance);
-                    SetHookKinematic(true);
-                    if (hookRb != null) hookRb.position = initPos;
-                    else hookObject.transform.position = initPos;
 
+                    if (hookRb != null && !hookRb.isKinematic)
+                    {
+                        hookRb.velocity = Vector3.zero;
+                        hookRb.angularVelocity = Vector3.zero;
+                    }
+
+                    SetHookKinematic(true);
+                    hookObject.transform.position = initPos;
                     hookObject.transform.rotation = rodTip.rotation;
+
+                    if (hookRb != null)
+                    {
+                        hookRb.position = initPos;
+                    }
+
+                    var netTransform = hookObject.GetComponent<Unity.Netcode.Components.NetworkTransform>();
+                    if (netTransform != null)
+                    {
+                        if (netTransform.IsSpawned && (netTransform.IsServer || netTransform.IsOwner))
+                        {
+                            netTransform.Teleport(initPos, rodTip.rotation, hookObject.transform.localScale);
+                        }
+                    }
+
+                    Physics.SyncTransforms();
+
                     if (hookCollider != null) hookCollider.isTrigger = false;
                 }
 
@@ -695,7 +717,7 @@ public class ThirdPController : NetworkBehaviour
         GUILayout.BeginArea(new Rect(posX + 10, posY + 10, boxWidth - 20, boxHeight - 20));
         GUILayout.Label("- DEBUG WII FISHING -", style);
         GUILayout.Label("Estado: " + debugState, style);
-        GUILayout.Label("Anzuelo Ocupado: " + (isHookOccupied ? "SÍ (BLOQUEADO)" : "NO (LIBRE)"), styleLock);
+        GUILayout.Label("Anzuelo Ocupado: " + (isHookOccupied ? "SI (BLOQUEADO)" : "NO (LIBRE)"), styleLock);
         GUILayout.Label("Gesto Solicitado: " + currentRequestedGesture.ToString(), styleGesture);
 
         if (wiiCastState == 1)
@@ -706,8 +728,8 @@ public class ThirdPController : NetworkBehaviour
             GUILayout.Label("Ventana de tiro: " + timeLeft.ToString("F2") + "s", timerStyle);
         }
 
-        GUILayout.Label("Acel. Dinámica: " + debugAccelMag.ToString("F2"), style);
-        GUILayout.Label("Pico MAX Dinámico: " + peakSwingForce.ToString("F2"), style);
+        GUILayout.Label("Acel. Dinamica: " + debugAccelMag.ToString("F2"), style);
+        GUILayout.Label("Pico MAX Dinamico: " + peakSwingForce.ToString("F2"), style);
 
         style.normal.textColor = Color.green;
         GUILayout.Label("Potencia Tiro Final: " + debugCalculatedForce.ToString("F1"), style);
@@ -771,5 +793,32 @@ public class ThirdPController : NetworkBehaviour
         }
 
         return false;
+    }
+
+    private void OnDisable()
+    {
+        currentVelY = 0f;
+        targetVelY = 0f;
+        if (animator != null)
+        {
+            animator.SetFloat("velY", 0f);
+        }
+
+        if (isFishing)
+        {
+            if (fishingRod != null) fishingRod.SetActive(false);
+            if (lineObject != null) lineObject.SetActive(false);
+            if (hookObject != null) hookObject.SetActive(false);
+        }
+    }
+
+    private void OnEnable()
+    {
+        if (isFishing)
+        {
+            if (fishingRod != null) fishingRod.SetActive(true);
+            if (lineObject != null) lineObject.SetActive(true);
+            if (hookObject != null) hookObject.SetActive(true);
+        }
     }
 }

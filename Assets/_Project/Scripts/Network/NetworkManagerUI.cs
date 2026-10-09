@@ -25,42 +25,75 @@ public class NetworkManagerUI : MonoBehaviour
         if (uiContainer != null) uiContainer.SetActive(true);
         if (hudContainer != null) hudContainer.SetActive(false);
 
-        serverBtn.onClick.AddListener(() =>
+        if (serverBtn != null)
         {
-            SetTransportAsServer();
-            NetworkManager.Singleton.StartServer();
-            ShowGameHUD();
-        });
+            serverBtn.onClick.AddListener(() => StartServerMode());
+        }
  
-        hostBtn.onClick.AddListener(() =>
+        if (hostBtn != null)
         {
-            SetTransportAsServer();
-            NetworkManager.Singleton.StartHost();
-            ShowGameHUD();
-        });
+            hostBtn.onClick.AddListener(() =>
+            {
+                SetTransportAsServer();
+                NetworkManager.Singleton.StartHost();
+                ShowGameHUD();
+            });
+        }
  
-        clientBtn.onClick.AddListener(() =>
+        if (clientBtn != null)
         {
-            SetTransportAsClient();
-            NetworkManager.Singleton.StartClient();
-            ShowGameHUD();
-        });
+            clientBtn.onClick.AddListener(() => StartClientMode());
+        }
     }
 
     private IEnumerator Start()
     {
+        UnlockCursor();
 #if UNITY_ANDROID
         yield return new WaitForSeconds(2.5f);
 
-        if (NetworkManager.Singleton != null)
+        if (NetworkManager.Singleton != null && !NetworkManager.Singleton.IsClient)
         {
-            SetTransportAsClient();
-            NetworkManager.Singleton.StartClient();
-            ShowGameHUD();
+            StartClientMode();
         }
 #else
-        yield break;
+        yield return new WaitForSeconds(0.2f);
+
+        if (NetworkManager.Singleton != null && !NetworkManager.Singleton.IsServer)
+        {
+            StartServerMode();
+        }
 #endif
+    }
+
+    private void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            UnlockCursor();
+        }
+    }
+
+    private void StartServerMode()
+    {
+        SetTransportAsServer();
+        NetworkManager.Singleton.StartServer();
+        ShowGameHUD();
+        Debug.Log("[RED] Servidor iniciado automaticamente en PC.");
+    }
+
+    private void StartClientMode()
+    {
+        SetTransportAsClient();
+        NetworkManager.Singleton.StartClient();
+        ShowGameHUD();
+        Debug.Log("[RED] Conectando como Cliente desde Celular.");
+    }
+
+    public void UnlockCursor()
+    {
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
     }
 
     private void ShowGameHUD()
