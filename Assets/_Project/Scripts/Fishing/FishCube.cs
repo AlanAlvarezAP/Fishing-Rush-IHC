@@ -50,14 +50,7 @@ public class FishCube : NetworkBehaviour
     {
         if (minigameUI != null) return minigameUI;
 
-        if (FishMinigameUI.Instance != null)
-        {
-            minigameUI = FishMinigameUI.Instance;
-        }
-        else
-        {
-            minigameUI = FindObjectOfType<FishMinigameUI>();
-        }
+        minigameUI = GetComponentInChildren<FishMinigameUI>(true);
 
         return minigameUI;
     }
@@ -136,7 +129,10 @@ public class FishCube : NetworkBehaviour
         }
         else if (isFighting)
         {
-            // El objetivo se mueve evasivamente en EvasiveFightRoutine
+            if (targetHook != null && fishMotion != null)
+            {
+                targetHook.position = fishMotion.transform.position;
+            }
         }
         else if (isHooked)
         {
