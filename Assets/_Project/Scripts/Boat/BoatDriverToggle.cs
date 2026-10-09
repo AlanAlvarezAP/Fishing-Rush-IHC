@@ -3,6 +3,10 @@ using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
 
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR
+using WiimoteApi;
+#endif
+
 public class BoatDriverToggle : NetworkBehaviour
 {
     [Header("Referencias del Bote")]
@@ -18,7 +22,7 @@ public class BoatDriverToggle : NetworkBehaviour
     private CharacterController characterController;
 
     private bool isDriving = false;
-
+    private bool wasWiiOne = false;
     private void Awake()
     {
         boatController = GetComponent<BoatController>();
@@ -52,7 +56,29 @@ public class BoatDriverToggle : NetworkBehaviour
     {
         if (!IsServer) return;
 
-        if (Input.GetKeyDown(toggleKey))
+        bool wiiToggleTrigger = false;
+
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR
+        if (WiimoteManager.HasWiimote() && WiimoteManager.Wiimotes.Count > 0)
+        {
+            Wiimote wiimote = WiimoteManager.Wiimotes[0];
+
+            int ret;
+            do
+            {
+                ret = wiimote.ReadWiimoteData();
+            } while (ret > 0);
+
+            // Detección de botón 1 del Wiimote (se activa solo en el primer frame que se presiona)
+            bool currentWiiOne = wiimote.Button.one;
+            if (currentWiiOne && !wasWiiOne)
+            {
+                wiiToggleTrigger = true;
+            }
+            wasWiiOne = currentWiiOne;
+        }
+#endif
+        if (Input.GetKeyDown(toggleKey) || wiiToggleTrigger)
         {
             if (!TryFindPlayer()) return;
             ToggleDrivingMode();

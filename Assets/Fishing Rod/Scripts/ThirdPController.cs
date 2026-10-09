@@ -122,10 +122,10 @@ public class ThirdPController : NetworkBehaviour
     void Start()
     {
         controller = GetComponent<CharacterController>();
-        Cursor.lockState = CursorLockMode.Locked;
+        // NOTA: Se removió el bloqueo de cursor de aquí para evitar interferir con el Menú Principal.
         cinput = GetComponent<CharacterInputController>();
-        animator.SetBool("startFishing", false);
-        fishingRod.SetActive(false);
+        if (animator != null) animator.SetBool("startFishing", false);
+        if (fishingRod != null) fishingRod.SetActive(false);
 
         if (lineObject != null)
         {
@@ -153,8 +153,7 @@ public class ThirdPController : NetworkBehaviour
     {
         if (IsOwner)
         {
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
+            // El control del cursor ahora lo gestiona exclusivamente el Menú Principal al arrancar.
         }
     }
 
@@ -162,6 +161,7 @@ public class ThirdPController : NetworkBehaviour
     {
         if (!IsOwner) return;
 
+        // Opcional: Permite alternar el cursor con Escape solo si ya estás jugando
         if (Input.GetKeyDown(KeyCode.Escape))
         {
             if (Cursor.lockState == CursorLockMode.Locked)
@@ -518,7 +518,6 @@ public class ThirdPController : NetworkBehaviour
         if (hookObject != null && rodTip != null)
         {
             SetHookKinematic(false);
-            //SetHookKinematicClientRpc(false);
 
             if (hookRb != null)
             {
@@ -674,7 +673,6 @@ public class ThirdPController : NetworkBehaviour
         }
     }
 
-    // --- SISTEMA DE VIBRACIÓN DEL MANDO DE WII ---
     public void TriggerRumble(float duration)
     {
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR
@@ -840,7 +838,7 @@ public class ThirdPController : NetworkBehaviour
     [ClientRpc]
     private void SetFishingVisualsClientRpc(bool active, Vector3 hookPos, Quaternion hookRot)
     {
-        if (IsOwner) return; 
+        if (IsOwner) return;
 
         if (hookObject != null)
         {

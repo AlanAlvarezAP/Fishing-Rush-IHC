@@ -32,46 +32,76 @@ public class MenuMismaEscena : MonoBehaviour
     private bool wasWiiUp = false;
     private bool wasWiiDown = false;
 
+    void Awake()
+    {
+        // Forzamos el apagado inmediato mediante CanvasGroup para evitar bugs visuales
+        if (canvasGameHUD != null)
+        {
+            CanvasGroup cg = canvasGameHUD.GetComponent<CanvasGroup>();
+            if (cg == null) cg = canvasGameHUD.AddComponent<CanvasGroup>();
+            cg.alpha = 0f; // Lo hace invisible
+            cg.interactable = false; // Evita clics
+            cg.blocksRaycasts = false; // Evita que bloquee otros botones
+        }
+
+        if (canvasGameOver != null) canvasGameOver.SetActive(false);
+        if (panelWiimote != null) panelWiimote.SetActive(false);
+        if (panelTutorial != null) panelTutorial.SetActive(false);
+
+        if (canvasMenu != null) canvasMenu.SetActive(true);
+    }
+
     void Start()
     {
         menuButtons = new Button[] { btnJugar, btnWiimote, btnTutorial, btnSalir };
 
-        Time.timeScale = 1f; // Asegurar escala normal al arrancar
-        if (canvasGameOver != null) canvasGameOver.SetActive(false);
+        Time.timeScale = 1f;
 
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        ApagarJugador();
         MostrarMenu();
     }
 
     void Update()
     {
-        if (canvasMenu != null && canvasMenu.activeInHierarchy)
-        {
+        // BLOQUEO: Si el tutorial o el panel de Wiimote están abiertos, 
+        // ignoramos el Update del menú para que la tecla A no haga clics fantasma en el fondo.
+        bool subPanelAbierto = (panelTutorial != null && panelTutorial.activeSelf) ||
+                              (panelWiimote != null && panelWiimote.activeSelf);
+
+        if (subPanelAbierto || canvasMenu == null || !canvasMenu.activeInHierarchy) return;
+
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR
-            if (WiimoteManager.HasWiimote() && WiimoteManager.Wiimotes.Count > 0)
+        if (WiimoteManager.HasWiimote() && WiimoteManager.Wiimotes.Count > 0)
+        {
+            Wiimote wiimote = WiimoteManager.Wiimotes[0];
+
+            int ret;
+            do
             {
-                Wiimote wiimote = WiimoteManager.Wiimotes[0];
+                ret = wiimote.ReadWiimoteData();
+            } while (ret > 0);
 
-                int ret;
-                do
-                {
-                    ret = wiimote.ReadWiimoteData();
-                } while (ret > 0);
+            bool currentWiiDown = wiimote.Button.d_down || wiimote.Button.d_right;
+            bool currentWiiUp = wiimote.Button.d_up || wiimote.Button.d_left;
+            bool currentWiiA = wiimote.Button.a;
 
-                bool currentWiiDown = wiimote.Button.d_down || wiimote.Button.d_right;
-                bool currentWiiUp = wiimote.Button.d_up || wiimote.Button.d_left;
+            if (currentWiiDown && !wasWiiDown) CambiarSeleccion(1);
+            wasWiiDown = currentWiiDown;
 
-                if (currentWiiDown && !wasWiiDown) CambiarSeleccion(1);
-                wasWiiDown = currentWiiDown;
+            if (currentWiiUp && !wasWiiUp) CambiarSeleccion(-1);
+            wasWiiUp = currentWiiUp;
 
-                if (currentWiiUp && !wasWiiUp) CambiarSeleccion(-1);
-                wasWiiUp = currentWiiUp;
-
-                bool currentWiiA = wiimote.Button.a;
-                if (currentWiiA && !wasWiiA) EjecutarBotonSeleccionado();
-                wasWiiA = currentWiiA;
-            }
-#endif
+            if (currentWiiA && !wasWiiA) EjecutarBotonSeleccionado();
+            wasWiiA = currentWiiA;
         }
+#endif
+
+        if (Input.GetKeyDown(KeyCode.S) || Input.GetKeyDown(KeyCode.DownArrow)) CambiarSeleccion(1);
+        if (Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.UpArrow)) CambiarSeleccion(-1);
+        if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) EjecutarBotonSeleccionado();
     }
 
     private void CambiarSeleccion(int direccion)
@@ -99,8 +129,21 @@ public class MenuMismaEscena : MonoBehaviour
 
         if (canvasMenu != null) canvasMenu.SetActive(false);
         if (canvasGameOver != null) canvasGameOver.SetActive(false);
-        if (canvasGameHUD != null) canvasGameHUD.SetActive(true);
+        if (panelWiimote != null) panelWiimote.SetActive(false);
+        if (panelTutorial != null) panelTutorial.SetActive(false);
 
+        if (canvasGameHUD != null)
+        {
+            CanvasGroup cg = canvasGameHUD.GetComponent<CanvasGroup>();
+            if (cg != null)
+            {
+                cg.alpha = 1f;
+                cg.interactable = true;
+                cg.blocksRaycasts = true;
+            }
+        }
+
+        GarantizarJugador();
         if (playerController != null)
         {
             playerController.enabled = true;
@@ -117,24 +160,31 @@ public class MenuMismaEscena : MonoBehaviour
 
     public void AbrirWiimote()
     {
-        if (panelWiimote != null) panelWiimote.SetActive(!panelWiimote.activeSelf);
         if (panelTutorial != null) panelTutorial.SetActive(false);
+        if (panelWiimote != null) panelWiimote.SetActive(true);
+
+        ApagarJugador();
     }
 
-    // Método añadido para cerrar el panel de calibración de Wii limpiamente
     public void CerrarPanelWiimote()
     {
-        if (panelWiimote != null)
-        {
-            panelWiimote.SetActive(false);
-        }
+        if (panelWiimote != null) panelWiimote.SetActive(false);
         MostrarMenu();
     }
 
     public void AbrirTutorial()
     {
-        if (panelTutorial != null) panelTutorial.SetActive(!panelTutorial.activeSelf);
+        Debug.Log("[Menu] AbrirTutorial llamado. panelTutorial = " + (panelTutorial != null ? panelTutorial.name : "NULL"));
         if (panelWiimote != null) panelWiimote.SetActive(false);
+        if (panelTutorial != null) panelTutorial.SetActive(true);
+
+        ApagarJugador();
+    }
+
+    public void CerrarPanelTutorial()
+    {
+        if (panelTutorial != null) panelTutorial.SetActive(false);
+        MostrarMenu();
     }
 
     public void SalirDelJuego()
@@ -158,10 +208,7 @@ public class MenuMismaEscena : MonoBehaviour
         if (panelWiimote != null) panelWiimote.SetActive(false);
         if (panelTutorial != null) panelTutorial.SetActive(false);
 
-        if (playerController != null)
-        {
-            playerController.enabled = false;
-        }
+        ApagarJugador();
 
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -178,10 +225,7 @@ public class MenuMismaEscena : MonoBehaviour
         if (canvasGameHUD != null) canvasGameHUD.SetActive(false);
         if (canvasGameOver != null) canvasGameOver.SetActive(true);
 
-        if (playerController != null)
-        {
-            playerController.enabled = false;
-        }
+        ApagarJugador();
 
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -204,5 +248,23 @@ public class MenuMismaEscena : MonoBehaviour
         if (canvasGameOver != null) canvasGameOver.SetActive(false);
 
         MostrarMenu();
+    }
+
+    private void GarantizarJugador()
+    {
+        if (playerController == null)
+        {
+            playerController = FindObjectOfType<ThirdPController>();
+        }
+    }
+
+    private void ApagarJugador()
+    {
+        GarantizarJugador();
+        ThirdPController[] players = FindObjectsOfType<ThirdPController>();
+        foreach (var p in players)
+        {
+            if (p != null) p.enabled = false;
+        }
     }
 }
