@@ -7,6 +7,9 @@ using Unity.Netcode.Transports.UTP;
 
 public class NetworkManagerUI : MonoBehaviour
 {
+    [Header("Gestion de Menu")]
+    [SerializeField] private MenuMismaEscena menuMismaEscena;
+
     [Header("Botones de Red")]
     [SerializeField] private Button serverBtn;
     [SerializeField] private Button hostBtn;
@@ -107,6 +110,11 @@ public class NetworkManagerUI : MonoBehaviour
         {
             hudContainer.SetActive(true);
         }
+
+        //if (menuMismaEscena != null)
+        //{
+        //    menuMismaEscena.EmpezarJuego();
+        //}
     }
  
     private void SetTransportAsServer()

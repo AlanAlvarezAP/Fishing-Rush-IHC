@@ -48,3 +48,6 @@ TagManager:
   - name: WorldUI
     uniqueID: 2294173401
     locked: 0
+  - name: MenuUI
+    uniqueID: 650487009
+    locked: 0
