@@ -1,11 +1,12 @@
 using UnityEngine;
 using UnityEngine.UI;
+using Unity.Netcode;
 
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR
 using WiimoteApi;
 #endif
 
-public class MenuMismaEscena : MonoBehaviour
+public class MenuMismaEscena : NetworkBehaviour
 {
     [Header("UI Canvases Principales")]
     public GameObject canvasMenu;         // Objeto 'Canvas_Menu'
@@ -19,7 +20,11 @@ public class MenuMismaEscena : MonoBehaviour
     [Header("Referencia al Jugador")]
     public ThirdPController playerController;
 
-    [Header("Botones de los 4 Tiles (Para navegación con Wiimote)")]
+    [Header("Objetos para ocultar")]
+    public GameObject boteObjeto;
+    public GameObject rodObjeto;
+
+    [Header("Botones de los 4 Tiles (Para navegacion con Wiimote)")]
     public Button btnJugar;
     public Button btnWiimote;
     public Button btnTutorial;
@@ -66,8 +71,8 @@ public class MenuMismaEscena : MonoBehaviour
 
     void Update()
     {
-        // BLOQUEO: Si el tutorial o el panel de Wiimote están abiertos, 
-        // ignoramos el Update del menú para que la tecla A no haga clics fantasma en el fondo.
+        // BLOQUEO: Si el tutorial o el panel de Wiimote estï¿½n abiertos, 
+        // ignoramos el Update del menï¿½ para que la tecla A no haga clics fantasma en el fondo.
         bool subPanelAbierto = (panelTutorial != null && panelTutorial.activeSelf) ||
                               (panelWiimote != null && panelWiimote.activeSelf);
 
@@ -125,12 +130,33 @@ public class MenuMismaEscena : MonoBehaviour
 
     public void EmpezarJuego()
     {
+        OcultarMenuYEmpezarLocal();
+
+        if (IsServer || IsHost)
+        {
+            EmpezarJuegoClientRpc();
+        }
+    }
+
+    [ClientRpc]
+    private void EmpezarJuegoClientRpc()
+    {
+        if (!IsServer)
+        {
+            OcultarMenuYEmpezarLocal();
+        }
+    }
+
+    private void OcultarMenuYEmpezarLocal()
+    {
         Time.timeScale = 1f;
 
         if (canvasMenu != null) canvasMenu.SetActive(false);
         if (canvasGameOver != null) canvasGameOver.SetActive(false);
         if (panelWiimote != null) panelWiimote.SetActive(false);
         if (panelTutorial != null) panelTutorial.SetActive(false);
+
+        if (boteObjeto != null) boteObjeto.SetActive(true);
 
         if (canvasGameHUD != null)
         {
@@ -260,6 +286,8 @@ public class MenuMismaEscena : MonoBehaviour
 
     private void ApagarJugador()
     {
+        if (boteObjeto != null) boteObjeto.SetActive(false);
+        if (rodObjeto != null) rodObjeto.SetActive(false);
         GarantizarJugador();
         ThirdPController[] players = FindObjectsOfType<ThirdPController>();
         foreach (var p in players)

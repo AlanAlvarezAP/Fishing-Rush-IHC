@@ -1,5 +1,37 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!1 &66042521503237188
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8268847426392694190}
+  m_Layer: 8
+  m_Name: CameraOffset
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8268847426392694190
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 66042521503237188}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0.5, z: -0.15}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 7878045610116645595}
+  m_Father: {fileID: 2604924809172461127}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &422202970320427777
 GameObject:
   m_ObjectHideFlags: 0
@@ -905,7 +937,7 @@ GameObject:
   - component: {fileID: 7283788629524619890}
   - component: {fileID: 65833480153131191}
   m_Layer: 0
-  m_Name: Cube (4)
+  m_Name: RodTip
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1134,13 +1166,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4359791766550691380}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.5, z: -0.15}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 8830055516362379222}
-  m_Father: {fileID: 2604924809172461127}
+  m_Father: {fileID: 8268847426392694190}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!20 &1683559273597744252
 Camera:
@@ -1758,7 +1790,7 @@ Transform:
   - {fileID: 954634196201066998}
   - {fileID: 7081656341331363205}
   - {fileID: 3863366480179610110}
-  - {fileID: 7878045610116645595}
+  - {fileID: 8268847426392694190}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!143 &1773590718811761831
@@ -1837,6 +1869,8 @@ MonoBehaviour:
   isFishing: 0
   isReeling: 0
   isCastingInProcess: 0
+  isHookOccupied: 0
+  currentRequestedGesture: 0
   fishingRod: {fileID: 4007870944022636038}
   lineObject: {fileID: 0}
   hookObject: {fileID: 0}
@@ -1844,7 +1878,6 @@ MonoBehaviour:
   hookCollider: {fileID: 0}
   castDelay: 1.75
   reelSpeed: 15
-  reelArcHeight: 2.5
   hangDistance: 0.4
   hookFollowSpeed: 12
   waterSurfaceY: -2
@@ -1852,6 +1885,7 @@ MonoBehaviour:
   waterRippleAmount: 0.1
   phase1MaxTime: 1.5
   windowSize: 25
+  gestureWindowSize: 40
   umbralMinimo: 0.6
   umbralAlto: 1.8
   fuerzaBaja: 12
@@ -1912,6 +1946,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   firstPersonCamera: {fileID: 1683559273597744252}
   thirdPersonCamera: {fileID: 0}
+  characterMeshRenderers: []
   toggleKey: 99
   startInFirstPerson: 0
   isFirstPerson: 0
