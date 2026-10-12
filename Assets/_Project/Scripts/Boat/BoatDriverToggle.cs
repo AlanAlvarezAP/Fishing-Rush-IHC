@@ -25,132 +25,154 @@ public class BoatDriverToggle : NetworkBehaviour
 
     private bool isDriving = false;
     private bool wasWiiOne = false;
+
+    //private NetworkVariable<bool> isDrivingNet = new NetworkVariable<bool>(
+    //    false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    //);
+
+    private static bool HasAuthority
+    {
+        get
+        {
+            var nm = NetworkManager.Singleton;
+            return nm == null || !nm.IsListening || nm.IsServer;
+        }
+    }
+
     private void Awake()
     {
-        boatController = GetComponent<BoatController>();
+        boatController = GetComponentInParent<BoatController>();
+        if (boatController == null) boatController = GetComponentInChildren<BoatController>();
+ 
+        if (boatController == null)
+            Debug.LogError("[BOTE] No encuentro BoatController: ponlo en el mismo GameObject que este script.");
+    }
+    /*
+    public override void OnNetworkSpawn()
+    {
+        base.OnNetworkSpawn();
+        isDrivingNet.OnValueChanged += OnDrivingStateChanged;
+        ApplyDrivingStateLocally(isDrivingNet.Value);
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        base.OnNetworkDespawn();
+        isDrivingNet.OnValueChanged -= OnDrivingStateChanged;
+    }
+
+    private void OnDrivingStateChanged(bool previousValue, bool newValue)
+    {
+        if (isDriving != newValue)
+        {
+            ApplyDrivingStateLocally(newValue);
+        }
     }
 
     private void Start()
     {
         TryFindPlayer();
     }
-
+    */
     private bool TryFindPlayer()
     {
         if (playerObject == null)
         {
-            Debug.LogWarning("[DEBUG BOTE] Falla: 'playerObject' es NULL");
-            return false;
+            // En el host, el jugador local ES el jugador del host
+            var nm = NetworkManager.Singleton;
+            if (nm != null && nm.IsListening && nm.LocalClient != null && nm.LocalClient.PlayerObject != null)
+                playerObject = nm.LocalClient.PlayerObject.gameObject;
+            else
+                playerObject = GameObject.FindWithTag("Player");
+ 
+            if (playerObject == null)
+            {
+                Debug.LogWarning("[BOTE] No se encontro al jugador (tag 'Player' / PlayerObject).");
+                return false;
+            }
         }
-
-        if (playerController == null)
-            playerController = playerObject.GetComponent<ThirdPController>();
-
-        if (characterController == null)
-            characterController = playerObject.GetComponent<CharacterController>();
-
+ 
+        if (playerController == null) playerController = playerObject.GetComponent<ThirdPController>();
+        if (characterController == null) characterController = playerObject.GetComponent<CharacterController>();
         return true;
     }
 
-    private void Update()
+        private void Update()
     {
+        if (!HasAuthority) return; // los clientes solo visualizan
+ 
         bool wiiToggleTrigger = false;
-
+ 
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR
         if (WiimoteManager.HasWiimote() && WiimoteManager.Wiimotes.Count > 0)
         {
             Wiimote wiimote = WiimoteManager.Wiimotes[0];
-
+ 
             int ret;
-            do
-            {
-                ret = wiimote.ReadWiimoteData();
-            } while (ret > 0);
-
+            do { ret = wiimote.ReadWiimoteData(); } while (ret > 0);
+ 
             bool currentWiiOne = wiimote.Button.one;
-            if (currentWiiOne && !wasWiiOne)
-            {
-                wiiToggleTrigger = true;
-            }
+            if (currentWiiOne && !wasWiiOne) wiiToggleTrigger = true;
             wasWiiOne = currentWiiOne;
         }
 #endif
+ 
         if (Input.GetKeyDown(toggleKey) || wiiToggleTrigger)
         {
-            Debug.Log("[DEBUG BOTE] Entrante detectado (Teclado o Wiimote).");
-
-            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening)
-            {
-                if (NetworkManager.Singleton.IsClient && !NetworkManager.Singleton.IsServer)
-                {
-                    Debug.LogWarning("[DEBUG BOTE] Bloqueado: La accion proviene de un Cliente.");
-                    return;
-                }
-            }
-
-            if (!TryFindPlayer())
-            {
-                Debug.LogWarning("[DEBUG BOTE] Bloqueado: TryFindPlayer() devolvio false.");
-                return;
-            }
-
-            Debug.Log("[DEBUG BOTE] Modo conduccion alternado exitosamente");
-            ToggleDrivingMode();
+            if (!TryFindPlayer()) return;
+            SetDriving(!isDriving);
         }
     }
-
+ 
     private void LateUpdate()
     {
-        bool isAllowed = (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening) || NetworkManager.Singleton.IsServer;
-
-        if (isAllowed && isDriving && playerObject != null && timonAnchor != null)
+        if (isDriving && playerObject != null && timonAnchor != null)
         {
-            playerObject.transform.position = timonAnchor.position;
-            playerObject.transform.rotation = timonAnchor.rotation;
+            playerObject.transform.SetPositionAndRotation(timonAnchor.position, timonAnchor.rotation);
         }
     }
-
-    private void ToggleDrivingMode()
+ 
+    private void SetDriving(bool driving)
     {
-        isDriving = !isDriving;
-
+        isDriving = driving;
+ 
         if (isDriving)
         {
-            //playerObject.transform.SetParent(transform);
-            TeleportPlayer(timonAnchor);
-
-            if (playerController != null) playerController.enabled = false;
             if (characterController != null) characterController.enabled = false;
+            if (playerController != null) playerController.enabled = false;
+ 
+            foreach (var col in playerObject.GetComponentsInChildren<Collider>())
+                col.enabled = false;
+ 
+            if (timonAnchor != null)
+                playerObject.transform.SetPositionAndRotation(timonAnchor.position, timonAnchor.rotation);
+ 
             if (boatController != null) boatController.SetDrivingState(true);
-
-            Debug.Log("[BOTE - SERVIDOR] Modo Conduccion Activado");
+            Debug.Log("[BOTE] Modo Conduccion Activado");
         }
         else
         {
-            TeleportPlayer(deckAnchor);
-
+            if (deckAnchor != null)
+                playerObject.transform.SetPositionAndRotation(deckAnchor.position, deckAnchor.rotation);
+ 
+            foreach (var col in playerObject.GetComponentsInChildren<Collider>())
+                col.enabled = true;
+ 
+            Physics.SyncTransforms();
+ 
             if (characterController != null) characterController.enabled = true;
-            if (playerController != null) playerController.enabled = true;
+            if (playerController != null)
+            {
+                playerController.playerVelocity = Vector3.zero;
+                playerController.enabled = true;
+            }
+ 
             if (boatController != null) boatController.SetDrivingState(false);
-
-            Debug.Log("[BOTE - SERVIDOR] Modo Conduccion Desactivado");
+            Debug.Log("[BOTE] Modo Conduccion Desactivado");
         }
     }
-
-    private void TeleportPlayer(Transform target)
+    public void ForceStopDriving()
     {
-        if (target == null || playerObject == null) return;
-
-        if (characterController != null) characterController.enabled = false;
-
-        playerObject.transform.position = target.position;
-        playerObject.transform.rotation = target.rotation;
-
-        Physics.SyncTransforms();
-
-        if (playerController != null)
-        {
-            playerController.playerVelocity = Vector3.zero;
-        }
+        if (isDriving && playerObject != null) SetDriving(false);
     }
 }

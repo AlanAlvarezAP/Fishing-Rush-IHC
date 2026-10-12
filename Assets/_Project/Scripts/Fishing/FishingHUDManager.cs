@@ -1,8 +1,9 @@
 using UnityEngine;
 using TMPro;
 using System.Collections;
+using Unity.Netcode;
 
-public class FishingHUDManager : MonoBehaviour
+public class FishingHUDManager : NetworkBehaviour
 {
     public static FishingHUDManager Instance;
 
@@ -21,6 +22,16 @@ public class FishingHUDManager : MonoBehaviour
     [SerializeField] private GameObject castWindowPanel;
     [SerializeField] private TextMeshProUGUI castWindowText;
 
+    /*
+    void Start()
+    {
+        Canvas canvas = GetComponent<Canvas>();
+        if (canvas != null && canvas.worldCamera == null)
+        {
+            canvas.worldCamera = Camera.main;
+        }
+    }
+    */
     void Awake()
     {
         if (Instance == null)
@@ -32,15 +43,50 @@ public class FishingHUDManager : MonoBehaviour
             Destroy(gameObject);
             return;
         }
-
-        HideAll();
+        HideAllLocal();
     }
 
-    /// <summary>
-    /// Envía únicamente el valor flotante de la fuerza al componente de texto.
-    /// </summary>
+    public void EnsureCamera()
+    {
+        Canvas canvas = GetComponent<Canvas>();
+        if (canvas != null)
+        {
+            if (canvas.worldCamera == null || canvas.worldCamera != Camera.main)
+            {
+                canvas.worldCamera = Camera.main;
+            }
+        }
+        /*
+        Canvas canvas = GetComponent<Canvas>();
+        if (canvas != null && canvas.worldCamera == null)
+        {
+            canvas.worldCamera = Camera.main;
+        }
+        */
+    }
+
+    // --- POTENCIA DE LANZAMIENTO ---
     public void ShowCastPower(float force)
     {
+        if (IsServer || IsHost)
+        {
+            ShowCastPowerClientRpc(force);
+        }
+        else
+        {
+            ShowCastPowerLocal(force);
+        }
+    }
+
+    [ClientRpc]
+    private void ShowCastPowerClientRpc(float force)
+    {
+        ShowCastPowerLocal(force);
+    }
+
+    private void ShowCastPowerLocal(float force)
+    {
+        EnsureCamera();
         if (powerPanel == null || powerText == null) return;
 
         if (powerCoroutine != null) StopCoroutine(powerCoroutine);
@@ -57,32 +103,85 @@ public class FishingHUDManager : MonoBehaviour
         if (powerPanel != null) powerPanel.SetActive(false);
     }
 
-    /// <summary>
-    /// Envía únicamente el nombre del gesto en texto plano al componente.
-    /// </summary>
+    // --- GESTOS REQUERIDOS ---
     public void ShowGesturePrompt(string gestureName, int hits, int attempts)
     {
+        if (IsServer || IsHost)
+        {
+            ShowGesturePromptClientRpc(gestureName, hits, attempts);
+        }
+        else
+        {
+            ShowGesturePromptLocal(gestureName, hits, attempts);
+        }
+    }
+
+    [ClientRpc]
+    private void ShowGesturePromptClientRpc(string gestureName, int hits, int attempts)
+    {
+        ShowGesturePromptLocal(gestureName, hits, attempts);
+    }
+
+    private void ShowGesturePromptLocal(string gestureName, int hits, int attempts)
+    {
+        EnsureCamera();
         if (gesturePanel == null || gestureText == null) return;
 
         if (string.IsNullOrEmpty(gestureName) || gestureName == "None")
         {
-            HideGesturePrompt();
+            HideGesturePromptLocal();
             return;
         }
 
-        // Muestra por ejemplo: "HORIZONTAL 1/2"
         gestureText.text = $"{gestureName.ToUpper()} {hits}/{attempts}";
         gesturePanel.SetActive(true);
     }
 
     public void HideGesturePrompt()
     {
+        if (IsServer || IsHost)
+        {
+            HideGesturePromptClientRpc();
+        }
+        else
+        {
+            HideGesturePromptLocal();
+        }
+    }
+
+    [ClientRpc]
+    private void HideGesturePromptClientRpc()
+    {
+        HideGesturePromptLocal();
+    }
+
+    private void HideGesturePromptLocal()
+    {
         if (gesturePanel != null) gesturePanel.SetActive(false);
     }
 
-
+    // --- VENTANA DE TIRO ---
     public void ShowCastWindowTimer(float timeLeft)
     {
+        if (IsServer || IsHost)
+        {
+            ShowCastWindowTimerClientRpc(timeLeft);
+        }
+        else
+        {
+            ShowCastWindowTimerLocal(timeLeft);
+        }
+    }
+
+    [ClientRpc]
+    private void ShowCastWindowTimerClientRpc(float timeLeft)
+    {
+        ShowCastWindowTimerLocal(timeLeft);
+    }
+
+    private void ShowCastWindowTimerLocal(float timeLeft)
+    {
+        EnsureCamera();
         if (castWindowPanel == null || castWindowText == null) return;
 
         castWindowText.text = timeLeft.ToString("F1");
@@ -91,20 +190,53 @@ public class FishingHUDManager : MonoBehaviour
 
     public void HideCastWindowTimer()
     {
+        if (IsServer || IsHost)
+        {
+            HideCastWindowTimerClientRpc();
+        }
+        else
+        {
+            HideCastWindowTimerLocal();
+        }
+    }
+
+    [ClientRpc]
+    private void HideCastWindowTimerClientRpc()
+    {
+        HideCastWindowTimerLocal();
+    }
+
+    private void HideCastWindowTimerLocal()
+    {
         if (castWindowPanel != null && castWindowPanel.activeSelf)
         {
             castWindowPanel.SetActive(false);
         }
     }
 
-
-    // --- ACTUALIZAR HideAll() ---
+    // --- OCULTAR TODO ---
     public void HideAll()
+    {
+        if (IsServer || IsHost)
+        {
+            HideAllClientRpc();
+        }
+        else
+        {
+            HideAllLocal();
+        }
+    }
+
+    [ClientRpc]
+    private void HideAllClientRpc()
+    {
+        HideAllLocal();
+    }
+
+    private void HideAllLocal()
     {
         if (powerPanel != null) powerPanel.SetActive(false);
         if (gesturePanel != null) gesturePanel.SetActive(false);
         if (castWindowPanel != null) castWindowPanel.SetActive(false);
     }
-
-
 }

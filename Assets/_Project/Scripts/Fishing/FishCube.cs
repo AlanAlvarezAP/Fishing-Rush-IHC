@@ -41,6 +41,90 @@ public class FishCube : NetworkBehaviour
     private FishAlive.FishMotion fishMotion;
     private GameObject evasiveTargetObject;
 
+    public enum FishNetState : byte
+    {
+        Swimming,
+        Fighting,
+        Hooked
+    }
+
+    private NetworkVariable<FishNetState> currentNetState = new NetworkVariable<FishNetState>(
+        FishNetState.Swimming, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+
+    public override void OnNetworkSpawn()
+    {
+        base.OnNetworkSpawn();
+        currentNetState.OnValueChanged += OnFishStateChanged;
+
+        ApplyNetStateLocally(currentNetState.Value);
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        base.OnNetworkDespawn();
+        currentNetState.OnValueChanged -= OnFishStateChanged;
+    }
+
+    private void OnFishStateChanged(FishNetState oldState, FishNetState newState)
+    {
+        ApplyNetStateLocally(newState);
+    }
+
+    private void ApplyNetStateLocally(FishNetState state)
+    {
+        switch (state)
+        {
+            case FishNetState.Swimming:
+                isFighting = false;
+                isHooked = false;
+                if (fishMotion != null)
+                {
+                    fishMotion.enabled = true;
+                    fishMotion.SetAutoMotion(true);
+                }
+                break;
+
+            case FishNetState.Fighting:
+                isFighting = true;
+                isHooked = false;
+                if (timerUI != null) timerUI.gameObject.SetActive(false);
+
+                if (fishMotion != null)
+                {
+                    // En el cliente desactivamos la IA autónoma local para que no se desvíe del Host,
+                    // pero mantenemos el componente enabled para que reproduzca animaciones
+                    if (!IsServer)
+                    {
+                        fishMotion.SetAutoMotion(false);
+                    }
+                }
+                break;
+
+            case FishNetState.Hooked:
+                isFighting = false;
+                isHooked = true;
+                if (timerUI != null) timerUI.gameObject.SetActive(false);
+
+                if (fishMotion != null)
+                {
+                    fishMotion.SetAutoMotion(false);
+                    fishMotion.SetSpeed(0f);
+                    fishMotion.enabled = false; // Se apaga la animación al ser capturado
+                    fishMotion.transform.localPosition = Vector3.zero;
+                    fishMotion.transform.localRotation = Quaternion.identity;
+                }
+
+                Rigidbody rb = GetComponent<Rigidbody>();
+                if (rb != null)
+                {
+                    rb.isKinematic = true;
+                    rb.detectCollisions = false;
+                }
+                break;
+        }
+    }
+
     private void Awake()
     {
         fishMotion = GetComponentInChildren<FishAlive.FishMotion>();
@@ -129,9 +213,29 @@ public class FishCube : NetworkBehaviour
         }
         else if (isFighting)
         {
+            if (targetHook == null)
+            {
+                GameObject hookObj = GameObject.FindWithTag("Hook");
+                if (hookObj != null) targetHook = hookObj.transform;
+            }
+
             if (targetHook != null && fishMotion != null)
             {
-                targetHook.position = fishMotion.transform.position;
+                if (IsServer)
+                {
+                    if (fishMotion != null)
+                    {
+                        targetHook.position = fishMotion.transform.position;
+                    }
+                }
+                else
+                {
+                    transform.position = targetHook.position;
+                    if (fishMotion != null)
+                    {
+                        fishMotion.transform.position = targetHook.position;
+                    }
+                }
             }
         }
         else if (isHooked)
@@ -141,25 +245,32 @@ public class FishCube : NetworkBehaviour
                 timerUI.gameObject.SetActive(false);
             }
 
+            if (targetHook == null)
+            {
+                GameObject hookObj = GameObject.FindWithTag("Hook");
+                if (hookObj != null) targetHook = hookObj.transform;
+            }
+
             if (targetHook != null)
             {
-                Vector3 currentFishPos = transform.position;
+                transform.position = targetHook.position;
+                transform.rotation = targetHook.rotation;
 
                 if (fishMotion != null)
                 {
                     fishMotion.transform.position = targetHook.position;
-                    fishMotion.transform.rotation = Quaternion.identity;
-                    currentFishPos = fishMotion.transform.position;
+                    fishMotion.transform.rotation = targetHook.rotation;
                 }
-                else
+
+                if (playerTransform == null)
                 {
-                    transform.position = targetHook.position;
-                    transform.rotation = Quaternion.identity;
+                    ThirdPController pc = FindObjectOfType<ThirdPController>();
+                    if (pc != null) playerTransform = pc.transform;
                 }
 
                 if (playerTransform != null)
                 {
-                    float distanceToPlayer = Vector3.Distance(currentFishPos, playerTransform.position);
+                    float distanceToPlayer = Vector3.Distance(transform.position, playerTransform.position);
 
                     if (distanceToPlayer < 2.0f)
                     {
@@ -249,6 +360,10 @@ public class FishCube : NetworkBehaviour
 
     private IEnumerator EvasiveFightRoutine(Transform hook, Transform player, ThirdPController playerController)
     {
+        if (IsServer)
+        {
+            currentNetState.Value = FishNetState.Fighting;
+        }
         isApproaching = false;
         isFighting = true;
         targetHook = hook;
@@ -430,14 +545,21 @@ public class FishCube : NetworkBehaviour
 
     private void EscapeAndDespawn()
     {
-        isHooked = false;
-        isApproaching = false;
-        isFighting = false;
+        if (IsServer)
+        {
+            currentNetState.Value = FishNetState.Swimming;
+        }
 
         if (fishMotion != null)
         {
             fishMotion.SetReachMode(FishAlive.ReachMode.Wander);
         }
+
+        DespawnFish();
+
+        isHooked = false;
+        isApproaching = false;
+        isFighting = false;
 
         DespawnFish();
     }
@@ -481,8 +603,27 @@ public class FishCube : NetworkBehaviour
 
     public void HookMe(Transform hook, Transform player)
     {
+        targetHook = hook;
+        playerTransform = player;
+
+        if (IsServer)
+        {
+            currentNetState.Value = FishNetState.Hooked;
+        }
+        /*
         if (isHooked) return;
 
+        ApplyHookedStateLocally(hook, player);
+
+        if (IsServer || IsHost)
+        {
+            HookMeClientRpc();
+        }
+        */
+    }
+
+    private void ApplyHookedStateLocally(Transform hook, Transform player)
+    {
         isHooked = true;
         isApproaching = false;
         isFighting = false;
@@ -492,14 +633,14 @@ public class FishCube : NetworkBehaviour
         if (fishMotion != null)
         {
             fishMotion.SetAutoMotion(false);
-
-            transform.position = fishMotion.transform.position;
             fishMotion.transform.localPosition = Vector3.zero;
+            fishMotion.transform.localRotation = Quaternion.identity;
         }
 
         if (targetHook != null)
         {
-            targetHook.position = transform.position;
+            transform.position = targetHook.position;
+            transform.rotation = targetHook.rotation;
         }
 
         Rigidbody rb = GetComponent<Rigidbody>();
@@ -508,5 +649,19 @@ public class FishCube : NetworkBehaviour
             rb.isKinematic = true;
             rb.detectCollisions = false;
         }
+    }
+
+    [ClientRpc]
+    private void HookMeClientRpc()
+    {
+        if (IsServer) return;
+
+        GameObject hookObj = GameObject.FindWithTag("Hook");
+        Transform hTransform = hookObj != null ? hookObj.transform : null;
+
+        ThirdPController pc = FindObjectOfType<ThirdPController>();
+        Transform pTransform = pc != null ? pc.transform : null;
+
+        ApplyHookedStateLocally(hTransform, pTransform);
     }
 }
