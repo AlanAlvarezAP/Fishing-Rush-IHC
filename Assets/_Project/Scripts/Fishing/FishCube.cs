@@ -298,7 +298,7 @@ public class FishCube : NetworkBehaviour
 
             if (playerController != null)
             {
-                playerController.currentRequestedGesture = expectedGesture;
+                playerController.SetRequestedGesture(expectedGesture, successfulFollows, i);
                 playerController.TriggerRumble(0.3f);
             }
 
@@ -359,6 +359,11 @@ public class FishCube : NetworkBehaviour
             {
                 if (showDebug) Debug.Log($"--> FALLO: El tiempo se agotó.");
                 if (ui != null) ui.ShowFeedback(false);
+            }
+
+            if (playerController != null)
+            {
+                playerController.SetRequestedGesture(expectedGesture, successfulFollows, i + 1);
             }
 
             yield return new WaitForSeconds(0.4f);

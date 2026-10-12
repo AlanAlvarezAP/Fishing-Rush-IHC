@@ -1,35 +1,59 @@
 using UnityEngine;
+using TMPro;
 
 public class FishingCounterManager : MonoBehaviour
 {
     public static FishingCounterManager Instance;
+
+    [Header("Componentes UI")]
+    [SerializeField] private TextMeshProUGUI fishCounterText;
+
+    [Header("Configuración")]
+    [SerializeField] private string prefix = "Peces atrapados: ";
+
     private int fishCount = 0;
 
     void Awake()
     {
-        if (Instance == null) Instance = this;
-        else Destroy(gameObject);
+        if (Instance == null)
+        {
+            Instance = this;
+        }
+        else
+        {
+            Destroy(gameObject);
+            return;
+        }
+    }
+
+    void Start()
+    {
+        ResetCounter();
     }
 
     public void AddFish()
     {
         fishCount++;
-        Debug.Log("Pez capturado Total: " + fishCount);
+        UpdateCounterDisplay();
+        Debug.Log("[PESCA] Pez capturado. Total: " + fishCount);
     }
 
-    void OnGUI()
+    public void ResetCounter()
     {
-        GUIStyle style = new GUIStyle();
-        style.fontSize = 22;
-        style.normal.textColor = Color.cyan;
-        style.fontStyle = FontStyle.Bold;
-        style.alignment = TextAnchor.UpperRight;
+        fishCount = 0;
+        UpdateCounterDisplay();
+    }
 
-        float boxWidth = 250f;
-        float boxHeight = 50f;
-        float posX = Screen.width - boxWidth - 30f;
-        float posY = 30f;
+    private void UpdateCounterDisplay()
+    {
+        if (fishCounterText != null)
+        {
+            fishCounterText.text = prefix + fishCount;
+        }
+    }
 
-        GUI.Label(new Rect(posX, posY, boxWidth, boxHeight), "Peces atrapados: " + fishCount, style);
+    public int GetFishCount()
+    {
+        return fishCount;
     }
 }

@@ -41,7 +41,26 @@ public class ThirdPController : NetworkBehaviour
     public bool isCastingInProcess = false;
 
     public bool isHookOccupied = false;
-    public FishCube.FishingGesture currentRequestedGesture = FishCube.FishingGesture.None;
+    private FishCube.FishingGesture _currentRequestedGesture = FishCube.FishingGesture.None;
+    public FishCube.FishingGesture currentRequestedGesture
+    {
+        get => _currentRequestedGesture;
+        set
+        {
+            _currentRequestedGesture = value;
+            if (IsOwner && FishingHUDManager.Instance != null)
+            {
+                if (_currentRequestedGesture == FishCube.FishingGesture.None)
+                {
+                    FishingHUDManager.Instance.HideGesturePrompt();
+                }
+                else
+                {
+                    FishingHUDManager.Instance.ShowGesturePrompt(_currentRequestedGesture.ToString(), 0, 0);
+                }
+            }
+        }
+    }
 
     private NetworkVariable<Vector3> netHookPos = new NetworkVariable<Vector3>(
         Vector3.zero, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner
@@ -82,7 +101,7 @@ public class ThirdPController : NetworkBehaviour
     private int wiiCastState = 0;
     private float peakSwingForce = 0f;
     private float phase1Timer = 0f;
-    [SerializeField] private float phase1MaxTime = 1.5f;
+    [SerializeField] private float phase1MaxTime = 3.0f;
 
     [Header("Configuracion de Ventana de Movimiento (Wii Lanzamiento)")]
     public int windowSize = 25;
@@ -97,7 +116,7 @@ public class ThirdPController : NetworkBehaviour
     public float umbralAlto = 1.8f;
 
     [Header("Fuerza Aplicada al Anzuelo")]
-    public float fuerzaBaja = 12f;
+    public float fuerzaBaja = 5f;
     public float fuerzaAlta = 35f;
 
     private bool wasWiiB = false;
@@ -227,14 +246,16 @@ public class ThirdPController : NetworkBehaviour
 
                 if (!isFishing || alreadyCast || isCastingInProcess)
                 {
-                    wiiCastState = 0;
-                    phase1Timer = 0f;
+                    if (wiiCastState != 0)
+                    {
+                        ResetWiiCastState();
+                    }
                 }
                 else
                 {
                     switch (wiiCastState)
                     {
-                        case 0:
+                        case 0: // En reposo / Esperando que levantes la caña
                             if (Mathf.Abs(accelZ) > 0.88f && Mathf.Abs(accel[1]) < 0.35f && rawMag > 0.8f && rawMag < 1.2f)
                             {
                                 wiiCastState = 1;
@@ -244,13 +265,20 @@ public class ThirdPController : NetworkBehaviour
                             }
                             break;
 
-                        case 1:
+                        case 1: // Caña levantada (Ventana de tiempo activa)
                             phase1Timer += Time.deltaTime;
+                            float timeLeft = Mathf.Max(0f, phase1MaxTime - phase1Timer);
 
+                            // Muestra/actualiza el tiempo restante en el HUD
+                            if (IsOwner && FishingHUDManager.Instance != null)
+                            {
+                                FishingHUDManager.Instance.ShowCastWindowTimer(timeLeft);
+                            }
+
+                            // CASO A: Se agotó el tiempo (1.5 segundos)
                             if (phase1Timer > phase1MaxTime)
                             {
-                                wiiCastState = 0;
-                                phase1Timer = 0f;
+                                ResetWiiCastState(); // Se oculta el timer y vuelve a 0
                             }
                             else if (movementWindow.Count >= 5)
                             {
@@ -262,20 +290,20 @@ public class ThirdPController : NetworkBehaviour
 
                                 peakSwingForce = maxAccel;
 
+                                // CASO B: Lanzaste con suficiente fuerza
                                 if (maxAccel > umbralMinimo && dynamicAccelMag < maxAccel * 0.8f)
                                 {
                                     wiiCastTrigger = true;
                                     float t = Mathf.InverseLerp(umbralMinimo, umbralAlto, maxAccel);
                                     debugCalculatedForce = Mathf.Lerp(fuerzaBaja, fuerzaAlta, t);
 
-                                    wiiCastState = 0;
-                                    phase1Timer = 0f;
+                                    ResetWiiCastState(); // Lanzamiento exitoso -> Se oculta el timer
                                     movementWindow.Clear();
                                 }
+                                // CASO C: Cancelaste o bajaste la caña despacio
                                 else if (Mathf.Abs(accelZ) < 0.4f && Mathf.Abs(accel[1]) > 0.7f && rawMag < 1.2f)
                                 {
-                                    wiiCastState = 0;
-                                    phase1Timer = 0f;
+                                    ResetWiiCastState(); // Cancelado -> Se oculta el timer
                                 }
                             }
                             break;
@@ -372,6 +400,8 @@ public class ThirdPController : NetworkBehaviour
                 if (fishingRod != null) fishingRod.SetActive(false);
                 if (lineObject != null) lineObject.SetActive(false);
                 if (hookObject != null) hookObject.SetActive(false);
+
+                if (FishingHUDManager.Instance != null) FishingHUDManager.Instance.HideAll();
                 SetFishingVisualsClientRpc(false, Vector3.zero, Quaternion.identity);
             }
         }
@@ -514,6 +544,11 @@ public class ThirdPController : NetworkBehaviour
         alreadyCast = true;
         isHookOccupied = false;
         currentRequestedGesture = FishCube.FishingGesture.None;
+
+        if (IsOwner && FishingHUDManager.Instance != null)
+        {
+            FishingHUDManager.Instance.ShowCastPower(force);
+        }
 
         if (hookObject != null && rodTip != null)
         {
@@ -702,54 +737,6 @@ public class ThirdPController : NetworkBehaviour
 #endif
     }
 
-    void OnGUI()
-    {
-        if (!IsOwner) return;
-
-#if !UNITY_STANDALONE_WIN && !UNITY_EDITOR
-        return;
-#else
-        GUIStyle style = new GUIStyle();
-        style.fontSize = 12;
-        style.normal.textColor = Color.yellow;
-        style.fontStyle = FontStyle.Bold;
-
-        GUIStyle styleLock = new GUIStyle(style);
-        styleLock.normal.textColor = isHookOccupied ? Color.red : Color.green;
-
-        GUIStyle styleGesture = new GUIStyle(style);
-        styleGesture.normal.textColor = Color.cyan;
-
-        float boxWidth = 280f;
-        float boxHeight = 185f;
-        float posX = 10f;
-        float posY = Screen.height - boxHeight - 10f;
-
-        GUI.Box(new Rect(posX, posY, boxWidth, boxHeight), "");
-
-        GUILayout.BeginArea(new Rect(posX + 10, posY + 10, boxWidth - 20, boxHeight - 20));
-        GUILayout.Label("- DEBUG WII FISHING -", style);
-        GUILayout.Label("Estado: " + debugState, style);
-        GUILayout.Label("Anzuelo Ocupado: " + (isHookOccupied ? "SI (BLOQUEADO)" : "NO (LIBRE)"), styleLock);
-        GUILayout.Label("Gesto Solicitado: " + currentRequestedGesture.ToString(), styleGesture);
-
-        if (wiiCastState == 1)
-        {
-            float timeLeft = Mathf.Max(0f, phase1MaxTime - phase1Timer);
-            GUIStyle timerStyle = new GUIStyle(style);
-            timerStyle.normal.textColor = Color.cyan;
-            GUILayout.Label("Ventana de tiro: " + timeLeft.ToString("F2") + "s", timerStyle);
-        }
-
-        GUILayout.Label("Acel. Dinamica: " + debugAccelMag.ToString("F2"), style);
-        GUILayout.Label("Pico MAX Dinamico: " + peakSwingForce.ToString("F2"), style);
-
-        style.normal.textColor = Color.green;
-        GUILayout.Label("Potencia Tiro Final: " + debugCalculatedForce.ToString("F1"), style);
-
-        GUILayout.EndArea();
-#endif
-    }
 
     public void ClearGestureWindow()
     {
@@ -867,6 +854,33 @@ public class ThirdPController : NetworkBehaviour
             Vector3 p = Vector3.Lerp(hookObject.transform.position, netHookPos.Value, t);
             Quaternion r = Quaternion.Slerp(hookObject.transform.rotation, netHookRot.Value, t);
             hookObject.transform.SetPositionAndRotation(p, r);
+        }
+    }
+
+    private void ResetWiiCastState()
+    {
+        wiiCastState = 0;
+        phase1Timer = 0f;
+
+        if (IsOwner && FishingHUDManager.Instance != null)
+        {
+            FishingHUDManager.Instance.HideCastWindowTimer();
+        }
+    }
+
+    public void SetRequestedGesture(FishCube.FishingGesture gesture, int hits, int attempts)
+    {
+        _currentRequestedGesture = gesture;
+        if (IsOwner && FishingHUDManager.Instance != null)
+        {
+            if (_currentRequestedGesture == FishCube.FishingGesture.None)
+            {
+                FishingHUDManager.Instance.HideGesturePrompt();
+            }
+            else
+            {
+                FishingHUDManager.Instance.ShowGesturePrompt(_currentRequestedGesture.ToString(), hits, attempts);
+            }
         }
     }
 }
