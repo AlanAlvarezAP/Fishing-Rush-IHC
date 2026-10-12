@@ -16,9 +16,11 @@ public class BoatDriverToggle : NetworkBehaviour
     [Header("Teclas")]
     [SerializeField] private KeyCode toggleKey = KeyCode.F;
 
+    [Header("Referencia al Jugador")]
+    [SerializeField] private ThirdPController playerController;
+    [SerializeField] private GameObject playerObject;
+
     private BoatController boatController;
-    private GameObject playerObject;
-    private ThirdPController playerController;
     private CharacterController characterController;
 
     private bool isDriving = false;
@@ -37,25 +39,21 @@ public class BoatDriverToggle : NetworkBehaviour
     {
         if (playerObject == null)
         {
-            ThirdPController[] players = FindObjectsOfType<ThirdPController>();
-            foreach (var p in players)
-            {
-                if (p.IsOwner)
-                {
-                    playerController = p;
-                    playerObject = p.gameObject;
-                    characterController = playerObject.GetComponent<CharacterController>();
-                    break;
-                }
-            }
+            Debug.LogWarning("[DEBUG BOTE] Falla: 'playerObject' es NULL");
+            return false;
         }
-        return playerObject != null;
+
+        if (playerController == null)
+            playerController = playerObject.GetComponent<ThirdPController>();
+
+        if (characterController == null)
+            characterController = playerObject.GetComponent<CharacterController>();
+
+        return true;
     }
 
     private void Update()
     {
-        if (!IsServer) return;
-
         bool wiiToggleTrigger = false;
 
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR
@@ -69,7 +67,6 @@ public class BoatDriverToggle : NetworkBehaviour
                 ret = wiimote.ReadWiimoteData();
             } while (ret > 0);
 
-            // Detección de botón 1 del Wiimote (se activa solo en el primer frame que se presiona)
             bool currentWiiOne = wiimote.Button.one;
             if (currentWiiOne && !wasWiiOne)
             {
@@ -80,14 +77,33 @@ public class BoatDriverToggle : NetworkBehaviour
 #endif
         if (Input.GetKeyDown(toggleKey) || wiiToggleTrigger)
         {
-            if (!TryFindPlayer()) return;
+            Debug.Log("[DEBUG BOTE] Entrante detectado (Teclado o Wiimote).");
+
+            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening)
+            {
+                if (NetworkManager.Singleton.IsClient && !NetworkManager.Singleton.IsServer)
+                {
+                    Debug.LogWarning("[DEBUG BOTE] Bloqueado: La accion proviene de un Cliente.");
+                    return;
+                }
+            }
+
+            if (!TryFindPlayer())
+            {
+                Debug.LogWarning("[DEBUG BOTE] Bloqueado: TryFindPlayer() devolvio false.");
+                return;
+            }
+
+            Debug.Log("[DEBUG BOTE] Modo conduccion alternado exitosamente");
             ToggleDrivingMode();
         }
     }
 
     private void LateUpdate()
     {
-        if (IsServer && isDriving && playerObject != null && timonAnchor != null)
+        bool isAllowed = (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening) || NetworkManager.Singleton.IsServer;
+
+        if (isAllowed && isDriving && playerObject != null && timonAnchor != null)
         {
             playerObject.transform.position = timonAnchor.position;
             playerObject.transform.rotation = timonAnchor.rotation;
@@ -100,7 +116,7 @@ public class BoatDriverToggle : NetworkBehaviour
 
         if (isDriving)
         {
-            playerObject.transform.SetParent(transform);
+            //playerObject.transform.SetParent(transform);
             TeleportPlayer(timonAnchor);
 
             if (playerController != null) playerController.enabled = false;

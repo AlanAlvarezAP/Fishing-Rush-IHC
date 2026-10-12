@@ -22,7 +22,9 @@ public class BoatController : NetworkBehaviour
 
     void Update()
     {
-        if (!isBeingDriven || !IsServer) return;
+        bool isAllowed = (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening) || NetworkManager.Singleton.IsServer;
+
+        if (!isBeingDriven || !isAllowed) return;
 
         float vertical = Input.GetAxis("Vertical");
         float horizontal = Input.GetAxis("Horizontal");
@@ -38,7 +40,6 @@ public class BoatController : NetworkBehaviour
                 ret = wiimote.ReadWiimoteData();
             } while (ret > 0);
 
-            // Lectura de la cruceta direccional (D-Pad) del Wiimote
             if (wiimote.Button.d_up) vertical = 1f;
             if (wiimote.Button.d_down) vertical = -1f;
             if (wiimote.Button.d_left) horizontal = -1f;

@@ -332,15 +332,20 @@ public class FishCube : NetworkBehaviour
 
                 if (!matchedThisTurn)
                 {
-                    bool gestureDone = false;
+                    //bool gestureDone = false;
+                    bool gestureDone = Input.GetKeyDown(KeyCode.R);
 
-                    if (playerController != null)
-                        gestureDone = playerController.ValidateSpecificGesture(expectedGesture);
-                    else
-                        gestureDone = CheckKeyboardFallback(expectedGesture);
+                    if (!gestureDone)
+                    {
+                        if (playerController != null)
+                            gestureDone = playerController.ValidateSpecificGesture(expectedGesture);
+                        else
+                            gestureDone = CheckKeyboardFallback(expectedGesture);
+                    }
 
                     if (gestureDone)
                     {
+                        Debug.Log("[DEBUG PESCA] Gesto/R completado con exito!");
                         matchedThisTurn = true;
                         if (playerController != null) playerController.ClearGestureWindow();
                     }
@@ -411,10 +416,14 @@ public class FishCube : NetworkBehaviour
     {
         switch (expected)
         {
-            case FishingGesture.Horizontal: return Input.GetAxisRaw("Horizontal") != 0;
-            case FishingGesture.Vertical: return Input.GetAxisRaw("Vertical") != 0;
-            case FishingGesture.Circle: return Input.GetKeyDown(KeyCode.O);
-            case FishingGesture.Cross: return Input.GetKeyDown(KeyCode.X);
+            case FishingGesture.Horizontal:
+                return Input.GetAxisRaw("Horizontal") != 0;
+            case FishingGesture.Vertical:
+                return Input.GetAxisRaw("Vertical") != 0;
+            case FishingGesture.Circle:
+                return Input.GetKeyDown(KeyCode.O);
+            case FishingGesture.Cross:
+                return Input.GetKeyDown(KeyCode.X);
         }
         return false;
     }
