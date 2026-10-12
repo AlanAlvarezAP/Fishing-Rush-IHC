@@ -11,13 +11,13 @@ public class FishSpawner : NetworkBehaviour
     public float waterSurfaceY = -3.75f;
 
     [Header("Control de Poblacion")]
-    public int maxFishCount = 30;
-    public float spawnInterval = 3f;
+    public int maxFishCount = 20;
+    public float spawnInterval = 5f;
     private float timer = 0f;
 
     void Update()
     {
-        if (!IsServer) return;
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening && !IsServer) return;
         
         int currentFishCount = GameObject.FindGameObjectsWithTag("Fish").Length;
         
@@ -50,6 +50,36 @@ public class FishSpawner : NetworkBehaviour
         {
             netObj.Spawn();
         }
+    }
+
+    public void ClearAllFish()
+    {
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening && !IsServer) return;
+
+        GameObject[] existingFish = GameObject.FindGameObjectsWithTag("Fish");
+        foreach (GameObject fish in existingFish)
+        {
+            if (fish != null)
+            {
+                NetworkObject netObj = fish.GetComponent<NetworkObject>();
+                if (netObj != null && netObj.IsSpawned)
+                {
+                    netObj.Despawn();
+                }
+                else
+                {
+                    Destroy(fish);
+                }
+            }
+        }
+    }
+
+    public void ReiniciarSpawning()
+    {
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening && !IsServer) return;
+
+        ClearAllFish();
+        timer = spawnInterval;
     }
 
     private void OnDrawGizmosSelected()

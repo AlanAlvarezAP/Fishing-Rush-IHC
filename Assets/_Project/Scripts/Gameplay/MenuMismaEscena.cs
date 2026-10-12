@@ -1,5 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using Unity.Netcode;
 using TMPro;
 
@@ -10,11 +12,12 @@ using WiimoteApi;
 public class MenuMismaEscena : NetworkBehaviour
 {
     [Header("UI Canvases Principales")]
-    public GameObject canvasMenu;         // Objeto 'Canvas_Menu'
-    public GameObject canvasGameHUD;      // Objeto 'Canvas_GameHUD'
-    public GameObject canvasGameOver;     // Objeto 'Canvas_GameOver'
+    public GameObject canvasMenu;
+    public GameObject canvasGameHUD;
+    public GameObject canvasGameOver;
 
     [Header("Sub-Paneles Opcionales")]
+    public GameObject panelMenuPrincipal;
     public GameObject panelWiimote;
     public GameObject panelTutorial;
 
@@ -50,6 +53,27 @@ public class MenuMismaEscena : NetworkBehaviour
     private bool wasWiiUp = false;
     private bool wasWiiDown = false;
 
+    private NetworkVariable<int> selectedButtonIndexNet = new NetworkVariable<int>(
+        0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner
+    );
+
+    private NetworkVariable<bool> isMenuVisibleNet = new NetworkVariable<bool>(
+        true, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner
+    );
+
+    public override void OnNetworkSpawn()
+    {
+        selectedButtonIndexNet.OnValueChanged += (oldVal, newVal) =>
+        {
+            ResaltarBotonLocal(newVal);
+        };
+
+        isMenuVisibleNet.OnValueChanged += (oldVal, newVal) =>
+        {
+            if (canvasMenu != null) canvasMenu.SetActive(newVal);
+        };
+    }
+
     void Awake()
     {
         if (canvasGameHUD != null)
@@ -66,6 +90,17 @@ public class MenuMismaEscena : NetworkBehaviour
         if (panelTutorial != null) panelTutorial.SetActive(false);
 
         if (canvasMenu != null) canvasMenu.SetActive(true);
+        if (panelMenuPrincipal != null) panelMenuPrincipal.SetActive(true);
+
+        // for less resolution
+        var urpAsset = (UniversalRenderPipelineAsset)GraphicsSettings.currentRenderPipeline;
+        if (urpAsset != null)
+        {
+            urpAsset.renderScale = 0.8f;
+        }
+        Application.targetFrameRate = 60;
+        QualitySettings.vSyncCount = 0;
+        // end
     }
 
     void Start()
@@ -83,6 +118,38 @@ public class MenuMismaEscena : NetworkBehaviour
 
     void Update()
     {
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            if (panelTutorial != null && panelTutorial.activeSelf)
+            {
+                CerrarPanelTutorial();
+                return;
+            }
+
+            if (panelWiimote != null && panelWiimote.activeSelf)
+            {
+                CerrarPanelWiimote();
+                return;
+            }
+
+            bool jugando = canvasGameHUD != null && canvasGameHUD.activeInHierarchy 
+                        && (canvasMenu == null || !canvasMenu.activeInHierarchy)
+                        && (canvasGameOver == null || !canvasGameOver.activeInHierarchy);
+
+            if (jugando)
+            {
+                if (Cursor.lockState == CursorLockMode.Locked)
+                {
+                    Cursor.lockState = CursorLockMode.None;
+                    Cursor.visible = true;
+                }
+                else
+                {
+                    Cursor.lockState = CursorLockMode.Locked;
+                    Cursor.visible = false;
+                }
+            }
+        }
         bool subPanelAbierto = (panelTutorial != null && panelTutorial.activeSelf) ||
                               (panelWiimote != null && panelWiimote.activeSelf);
 
@@ -126,10 +193,11 @@ public class MenuMismaEscena : NetworkBehaviour
     {
         if (activeButtons == null || activeButtons.Length == 0) return;
 
-        selectedButtonIndex = (selectedButtonIndex + direccion + activeButtons.Length) % activeButtons.Length;
-        if (activeButtons[selectedButtonIndex] != null)
+        int newIndex = (selectedButtonIndexNet.Value + direccion + activeButtons.Length) % activeButtons.Length;
+
+        if (IsOwner || IsServer)
         {
-            activeButtons[selectedButtonIndex].Select();
+            selectedButtonIndexNet.Value = newIndex;
         }
     }
 
@@ -176,7 +244,7 @@ public class MenuMismaEscena : NetworkBehaviour
         if (panelWiimote != null) panelWiimote.SetActive(false);
         if (panelTutorial != null) panelTutorial.SetActive(false);
 
-        if (boteObjeto != null) boteObjeto.SetActive(true);
+        if (boteObjeto != null) SetBoteVisible(true);
 
         if (canvasGameHUD != null)
         {
@@ -205,35 +273,95 @@ public class MenuMismaEscena : NetworkBehaviour
         }
     }
 
+    // --- PANEL WIIMOTE ---
     public void AbrirWiimote()
     {
-        if (canvasMenu != null) canvasMenu.SetActive(false);
+        AbrirWiimoteLocal();
+        if (IsServer || IsHost) AbrirWiimoteClientRpc();
+    }
+
+    [ClientRpc]
+    private void AbrirWiimoteClientRpc()
+    {
+        if (!IsServer) AbrirWiimoteLocal();
+    }
+
+    private void AbrirWiimoteLocal()
+    {
+        if (canvasMenu != null) canvasMenu.SetActive(true);
+        if (panelMenuPrincipal != null) panelMenuPrincipal.SetActive(false);
         if (panelTutorial != null) panelTutorial.SetActive(false);
         if (panelWiimote != null) panelWiimote.SetActive(true);
 
         ApagarJugador();
+
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
     }
 
     public void CerrarPanelWiimote()
     {
-        if (panelWiimote != null) panelWiimote.SetActive(false);
-        MostrarMenu();
+        CerrarPanelWiimoteLocal();
+        if (IsServer || IsHost) CerrarPanelWiimoteClientRpc();
     }
 
+    [ClientRpc]
+    private void CerrarPanelWiimoteClientRpc()
+    {
+        if (!IsServer) CerrarPanelWiimoteLocal();
+    }
+
+    private void CerrarPanelWiimoteLocal()
+    {
+        if (panelWiimote != null) panelWiimote.SetActive(false);
+        MostrarMenuLocal();
+    }
+
+    // --- PANEL TUTORIAL ---
     public void AbrirTutorial()
     {
-        if (canvasMenu != null) canvasMenu.SetActive(false);
+        AbrirTutorialLocal();
+        if (IsServer || IsHost) AbrirTutorialClientRpc();
+    }
+
+    [ClientRpc]
+    private void AbrirTutorialClientRpc()
+    {
+        if (!IsServer) AbrirTutorialLocal();
+    }
+
+    private void AbrirTutorialLocal()
+    {
+        if (canvasMenu != null) canvasMenu.SetActive(true);
+        if (panelMenuPrincipal != null) panelMenuPrincipal.SetActive(false);
         if (panelWiimote != null) panelWiimote.SetActive(false);
         if (panelTutorial != null) panelTutorial.SetActive(true);
 
         ApagarJugador();
+
+        if (boteObjeto != null) SetBoteVisible(true);
+
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
     }
 
     public void CerrarPanelTutorial()
     {
+        CerrarPanelTutorialLocal();
+        if (IsServer || IsHost) CerrarPanelTutorialClientRpc();
+    }
+
+    [ClientRpc]
+    private void CerrarPanelTutorialClientRpc()
+    {
+        if (!IsServer) CerrarPanelTutorialLocal();
+    }
+
+    private void CerrarPanelTutorialLocal()
+    {
         if (panelTutorial != null) panelTutorial.SetActive(false);
         ResetearPosicionesOriginales();
-        MostrarMenu();
+        MostrarMenuLocal();
     }
 
     public void SalirDelJuego()
@@ -247,9 +375,22 @@ public class MenuMismaEscena : NetworkBehaviour
 
     public void MostrarMenu()
     {
+        MostrarMenuLocal();
+        if (IsServer || IsHost) SincronizarMenuClientRpc();
+    }
+
+    [ClientRpc]
+    private void SincronizarMenuClientRpc()
+    {
+        if (!IsServer) MostrarMenuLocal();
+    }
+
+    private void MostrarMenuLocal()
+    {
         Time.timeScale = 1f;
 
         if (canvasMenu != null) canvasMenu.SetActive(true);
+        if (panelMenuPrincipal != null) panelMenuPrincipal.SetActive(true); // Restaura panel de botones principales
         if (canvasGameHUD != null) canvasGameHUD.SetActive(false);
         if (canvasGameOver != null) canvasGameOver.SetActive(false);
 
@@ -267,10 +408,27 @@ public class MenuMismaEscena : NetworkBehaviour
         if (activeButtons.Length > 0 && activeButtons[0] != null)
         {
             activeButtons[0].Select();
+            if (IsServer || IsHost)
+            {
+                SincronizarSeleccionBotonClientRpc(0);
+            }
         }
     }
 
     public void MostrarGameOver()
+    {
+        if (canvasGameOver != null && canvasGameOver.activeSelf) return;
+        MostrarGameOverLocal();
+        if (IsServer || IsHost) SincronizarGameOverClientRpc();
+    }
+
+    [ClientRpc]
+    private void SincronizarGameOverClientRpc()
+    {
+        if (!IsServer) MostrarGameOverLocal();
+    }
+
+    private void MostrarGameOverLocal()
     {
         if (finalScoreText != null && FishingCounterManager.Instance != null)
         {
@@ -279,6 +437,7 @@ public class MenuMismaEscena : NetworkBehaviour
         }
 
         if (canvasGameHUD != null) canvasGameHUD.SetActive(false);
+        if (canvasMenu != null) canvasMenu.SetActive(false);
         if (canvasGameOver != null) canvasGameOver.SetActive(true);
 
         ApagarJugador();
@@ -286,7 +445,7 @@ public class MenuMismaEscena : NetworkBehaviour
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
-        Time.timeScale = 0f;
+        Time.timeScale = 1f; // 0f
 
         activeButtons = new Button[] { btnReiniciar, btnVolverMenu };
         selectedButtonIndex = 0;
@@ -294,24 +453,64 @@ public class MenuMismaEscena : NetworkBehaviour
         if (activeButtons.Length > 0 && activeButtons[0] != null)
         {
             activeButtons[0].Select();
+            if (IsServer || IsHost)
+            {
+                SincronizarSeleccionBotonClientRpc(0);
+            }
         }
     }
 
     public void ReiniciarJuego()
     {
+        ReiniciarJuegoLocal();
+        if (IsServer || IsHost) ReiniciarJuegoClientRpc();
+    }
+
+    [ClientRpc]
+    private void ReiniciarJuegoClientRpc()
+    {
+        if (!IsServer) ReiniciarJuegoLocal();
+    }
+
+    private void ReiniciarJuegoLocal()
+    {
         Time.timeScale = 1f;
-        UnityEngine.SceneManagement.SceneManager.LoadScene(
-            UnityEngine.SceneManagement.SceneManager.GetActiveScene().name
-        );
+
+        FishSpawner spawner = FindObjectOfType<FishSpawner>();
+        if (spawner != null && (NetworkManager.Singleton == null || NetworkManager.Singleton.IsServer))
+        {
+            spawner.ReiniciarSpawning();
+        }
+
+        //EmpezarJuego();
+        OcultarMenuYEmpezarLocal();
     }
 
     public void VolverAlMenuPrincipal()
+    {
+        VolverAlMenuPrincipalLocal();
+        if (IsServer || IsHost) VolverAlMenuPrincipalClientRpc();
+    }
+
+    [ClientRpc]
+    private void VolverAlMenuPrincipalClientRpc()
+    {
+        if (!IsServer) VolverAlMenuPrincipalLocal();
+    }
+
+    private void VolverAlMenuPrincipalLocal()
     {
         Time.timeScale = 1f;
 
         if (canvasGameOver != null) canvasGameOver.SetActive(false);
 
-        MostrarMenu();
+        FishSpawner spawner = FindObjectOfType<FishSpawner>();
+        if (spawner != null && (NetworkManager.Singleton == null || NetworkManager.Singleton.IsServer))
+        {
+            spawner.ClearAllFish();
+        }
+
+        MostrarMenuLocal();
     }
 
     private void GarantizarJugador()
@@ -324,7 +523,8 @@ public class MenuMismaEscena : NetworkBehaviour
 
     private void ApagarJugador()
     {
-        if (boteObjeto != null) boteObjeto.SetActive(false);
+        ResetearPosicionesOriginales();
+        if (boteObjeto != null) SetBoteVisible(false);
         if (rodObjeto != null) rodObjeto.SetActive(false);
         GarantizarJugador();
         ThirdPController[] players = FindObjectsOfType<ThirdPController>();
@@ -359,8 +559,15 @@ public class MenuMismaEscena : NetworkBehaviour
 
         if (boteObjeto != null)
         {
-            boteObjeto.transform.position = botePosInicial;
-            boteObjeto.transform.rotation = boteRotInicial;
+            var toggle = boteObjeto.GetComponent<BoatDriverToggle>();
+            if (toggle != null) toggle.ForceStopDriving();
+
+            //boteObjeto.transform.position = botePosInicial;
+            //boteObjeto.transform.rotation = boteRotInicial;
+            
+            var bc = boteObjeto.GetComponent<BoatController>();
+            if (bc != null) bc.SnapTo(botePosInicial, boteRotInicial);
+            else { boteObjeto.transform.position = botePosInicial; boteObjeto.transform.rotation = boteRotInicial; }
 
             Rigidbody rbBote = boteObjeto.GetComponent<Rigidbody>();
             if (rbBote != null)
@@ -381,5 +588,33 @@ public class MenuMismaEscena : NetworkBehaviour
 
             if (cc != null) cc.enabled = true;
         }
+    }
+    private void ResaltarBotonLocal(int index)
+    {
+        if (activeButtons != null && index >= 0 && index < activeButtons.Length)
+        {
+            if (activeButtons[index] != null)
+            {
+                activeButtons[index].Select();
+                Debug.Log($"[UI DEBUG] Botron {index} ({activeButtons[index].name}) seleccionado localmente.");
+            }
+        }
+    }
+
+    [ClientRpc]
+    private void SincronizarSeleccionBotonClientRpc(int index)
+    {
+        Debug.Log($"[UI DEBUG] ClientRpc recibido en celular. indice: {index}");
+        if (!IsServer)
+        {
+            ResaltarBotonLocal(index);
+        }
+    }
+    
+    private void SetBoteVisible(bool visible)
+    {
+        if (boteObjeto == null) return;
+        foreach (var r in boteObjeto.GetComponentsInChildren<Renderer>(true))
+            r.enabled = visible;
     }
 }

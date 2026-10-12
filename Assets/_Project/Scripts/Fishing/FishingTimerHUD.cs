@@ -8,10 +8,10 @@ public class FishingTimerHUD : MonoBehaviour
     [Header("Componentes UI")]
     [SerializeField] private TextMeshProUGUI timerText;
 
-    [Header("Referencias de Menú")]
+    [Header("Referencias de Menu")]
     [SerializeField] private MenuMismaEscena menuManager;
 
-    [Header("Configuración de Tiempo")]
+    [Header("Configuracion de Tiempo")]
     [SerializeField] private float totalGameTime = 180f; // 3 minutos
     private float currentTime;
     private bool isTimerRunning = false;
@@ -53,7 +53,7 @@ public class FishingTimerHUD : MonoBehaviour
     {
         currentTime = totalGameTime; // Reinicia el tiempo exacto al presionar Jugar
         isTimerRunning = true;
-        Debug.Log("[TEMPORIZADOR] ¡Los 3 minutos han comenzado!");
+        Debug.Log("[TEMPORIZADOR] Los 3 minutos han comenzado");
     }
 
     private void UpdateTimerDisplay(float timeToDisplay)
@@ -79,7 +79,7 @@ public class FishingTimerHUD : MonoBehaviour
     {
         if (timerText != null)
         {
-            timerText.text = "¡TIEMPO AGOTADO!";
+            timerText.text = "TIEMPO AGOTADO";
             timerText.color = Color.red;
         }
 

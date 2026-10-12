@@ -12,51 +12,116 @@ public class BoatController : NetworkBehaviour
     [Header("Ajustes de Movimiento")]
     [SerializeField] private float moveSpeed = 8.0f;
     [SerializeField] private float turnSpeed = 40.0f;
+    [SerializeField] private float syncSmoothing = 15f;
+
+    [Header("Debug")]
+    [SerializeField] private bool debugLogs = true;
 
     private bool isBeingDriven = false;
+
+    private NetworkVariable<Vector3> netBoatPos = new NetworkVariable<Vector3>(
+        Vector3.zero, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+    //private NetworkVariable<Vector3> netBoatPos = new NetworkVariable<Vector3>(
+    //    new Vector3(0f, -2.25f, 0.25f), NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    //);
+    private NetworkVariable<Quaternion> netBoatRot = new NetworkVariable<Quaternion>(
+        Quaternion.identity, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
 
     public void SetDrivingState(bool driving)
     {
         isBeingDriven = driving;
+        if (debugLogs) Debug.Log("[BOTE] BoatController.SetDrivingState(" + driving + ")");
     }
 
-    void Update()
+
+    public override void OnNetworkSpawn()
     {
-        bool isAllowed = (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening) || NetworkManager.Singleton.IsServer;
+        base.OnNetworkSpawn();
+        if (IsServer)
+        {
+            netBoatPos.Value = transform.position;
+            netBoatRot.Value = transform.rotation;
+        }
+        else
+        {
+            transform.position = netBoatPos.Value;
+            transform.rotation = netBoatRot.Value;
+        }
+    }
 
-        if (!isBeingDriven || !isAllowed) return;
+        private void Update()
+    {
+        var nm = NetworkManager.Singleton;
+        bool offline = nm == null || !nm.IsListening;
+ 
+        // Usamos el NetworkManager (no this.IsServer) para que, aunque el objeto
+        // no este spawneado todavia, el host nunca caiga en la rama de "cliente".
+        bool hasAuthority = offline || nm.IsServer;
 
+        if (!hasAuthority && debugLogs && Time.frameCount % 120 == 0)
+            Debug.Log($"[BOTE-CLIENTE] spawned={IsSpawned} activo={gameObject.activeInHierarchy} netPos={netBoatPos.Value} pos={transform.position}");
+ 
+        if (hasAuthority)
+        {
+            if (isBeingDriven)
+            {
+                ApplyMovement(ReadInput());
+            }
+ 
+            if (!offline && IsSpawned)
+            {
+                netBoatPos.Value = transform.position;
+                netBoatRot.Value = transform.rotation;
+            }
+        }
+        else if (IsSpawned)
+        {
+            // Cliente: solo visualizacion
+            float t = Time.deltaTime * syncSmoothing;
+            transform.position = Vector3.Lerp(transform.position, netBoatPos.Value, t);
+            transform.rotation = Quaternion.Slerp(transform.rotation, netBoatRot.Value, t);
+        }
+    }
+ 
+    private Vector2 ReadInput()
+    {
         float vertical = Input.GetAxis("Vertical");
         float horizontal = Input.GetAxis("Horizontal");
-
+ 
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR
         if (WiimoteManager.HasWiimote() && WiimoteManager.Wiimotes.Count > 0)
         {
             Wiimote wiimote = WiimoteManager.Wiimotes[0];
-
+ 
             int ret;
-            do
-            {
-                ret = wiimote.ReadWiimoteData();
-            } while (ret > 0);
-
+            do { ret = wiimote.ReadWiimoteData(); } while (ret > 0);
+ 
             if (wiimote.Button.d_up) vertical = 1f;
             if (wiimote.Button.d_down) vertical = -1f;
             if (wiimote.Button.d_left) horizontal = -1f;
             if (wiimote.Button.d_right) horizontal = 1f;
         }
 #endif
-
-        if (Mathf.Abs(vertical) > 0.1f)
+        return new Vector2(horizontal, vertical);
+    }
+ 
+    private void ApplyMovement(Vector2 input)
+    {
+        if (Mathf.Abs(input.y) > 0.1f)
         {
-            Vector3 moveDirection = transform.forward * vertical * moveSpeed * Time.deltaTime;
-            transform.position += moveDirection;
+            transform.position += transform.forward * input.y * moveSpeed * Time.deltaTime;
         }
-
-        if (Mathf.Abs(horizontal) > 0.1f)
+ 
+        if (Mathf.Abs(input.x) > 0.1f)
         {
-            float rotationAmount = horizontal * turnSpeed * Time.deltaTime;
-            transform.Rotate(Vector3.up, rotationAmount);
+            transform.Rotate(Vector3.up, input.x * turnSpeed * Time.deltaTime);
         }
+    }
+    public void SnapTo(Vector3 pos, Quaternion rot)
+    {
+        transform.SetPositionAndRotation(pos, rot);
+        if (IsServer && IsSpawned) { netBoatPos.Value = pos; netBoatRot.Value = rot; }
     }
 }

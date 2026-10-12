@@ -32,25 +32,39 @@ public class FishMinigameUI : MonoBehaviour
         HideAll();
     }
 
+    private void AsegurarActivacionPadres()
+    {
+        Transform current = transform;
+        while (current != null)
+        {
+            if (!current.gameObject.activeSelf)
+            {
+                current.gameObject.SetActive(true);
+            }
+            if (current.GetComponent<Canvas>() != null) break;
+            current = current.parent;
+        }
+    }
+
     public void HideAll()
     {
-        if (arrowImage != null) arrowImage.gameObject.SetActive(false);
-        if (patternText != null) patternText.gameObject.SetActive(false);
-        if (feedbackText != null) feedbackText.gameObject.SetActive(false);
-        if (finalStatusText != null) finalStatusText.gameObject.SetActive(false);
-
         if (arrowAnimationCoroutine != null)
         {
             StopCoroutine(arrowAnimationCoroutine);
             arrowAnimationCoroutine = null;
         }
+
+        if (arrowImage != null) arrowImage.gameObject.SetActive(false);
+        if (patternText != null) patternText.gameObject.SetActive(false);
+        if (feedbackText != null) feedbackText.gameObject.SetActive(false);
+        if (finalStatusText != null) finalStatusText.gameObject.SetActive(false);
     }
 
     public void UpdatePatternText(FishCube.FishingGesture gesture, int currentTurn, int totalTurns)
     {
+        AsegurarActivacionPadres();
         HideAll();
 
-        if (!gameObject.activeSelf) gameObject.SetActive(true);
         if (patternText == null) return;
 
         patternText.gameObject.SetActive(true);
@@ -69,9 +83,9 @@ public class FishMinigameUI : MonoBehaviour
 
     public void ShowDirection(int direction)
     {
+        AsegurarActivacionPadres();
         HideAll();
 
-        if (!gameObject.activeSelf) gameObject.SetActive(true);
         if (arrowImage == null) return;
 
         arrowImage.gameObject.SetActive(true);
@@ -80,35 +94,44 @@ public class FishMinigameUI : MonoBehaviour
         scale.x = direction > 0 ? Mathf.Abs(scale.x) : -Mathf.Abs(scale.x);
         arrowImage.transform.localScale = scale;
 
-        arrowAnimationCoroutine = StartCoroutine(AnimateArrowRoutine());
+        if (gameObject.activeInHierarchy)
+        {
+            arrowAnimationCoroutine = StartCoroutine(AnimateArrowRoutine());
+        }
     }
 
     public void ShowFeedback(bool success)
     {
+        AsegurarActivacionPadres();
         HideAll();
 
-        if (!gameObject.activeSelf) gameObject.SetActive(true);
         if (feedbackText == null) return;
 
         feedbackText.gameObject.SetActive(true);
         feedbackText.text = success ? "ACIERTO" : "FALLO";
         feedbackText.color = success ? successColor : failColor;
 
-        StartCoroutine(HideAfterSeconds(feedbackText.gameObject, 0.8f));
+        if (gameObject.activeInHierarchy)
+        {
+            StartCoroutine(HideAfterSeconds(feedbackText.gameObject, 0.8f));
+        }
     }
 
     public void ShowFinalResult(bool caught)
     {
+        AsegurarActivacionPadres();
         HideAll();
 
-        if (!gameObject.activeSelf) gameObject.SetActive(true);
         if (finalStatusText == null) return;
 
         finalStatusText.gameObject.SetActive(true);
         finalStatusText.text = caught ? "PEZ ATRAPADO" : "EL PEZ ESCAPO";
         finalStatusText.color = caught ? successColor : failColor;
 
-        StartCoroutine(HideAfterSeconds(finalStatusText.gameObject, 2.0f));
+        if (gameObject.activeInHierarchy)
+        {
+            StartCoroutine(HideAfterSeconds(finalStatusText.gameObject, 2.0f));
+        }
     }
 
     private IEnumerator AnimateArrowRoutine()

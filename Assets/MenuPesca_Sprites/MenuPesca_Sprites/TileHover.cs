@@ -10,13 +10,13 @@ public class TileHover : MonoBehaviour,
     [Header("Borde / Marcador Visual")]
     public GameObject outlineObject; // Objeto del borde (ej. 'BordeLuminoso')
 
-    [Header("Configuración de Escalado")]
+    [Header("Configuracion de Escalado")]
     [Range(1.0f, 1.3f)]
-    public float hoverScale = 1.10f;  // 1.10 = 10% más grande (Escala clara y visible)
+    public float hoverScale = 1.10f;  // 1.10 = 10% mas grande (Escala clara y visible)
     public float pressScale = 0.95f;  // Se contrae levemente al presionar
     public float animSpeed = 15f;
 
-    [Header("Configuración de Color")]
+    [Header("Configuracion de Color")]
     public bool useColorTint = true;
     public Color normalColor = Color.white;
     public Color hoverColor = new Color(1f, 1f, 0.8f, 1f); // Tono amarillo suave/brillante
@@ -45,17 +45,14 @@ public class TileHover : MonoBehaviour,
 
     void Update()
     {
-        // Transición suave de tamaño
         transform.localScale = Vector3.Lerp(transform.localScale, targetScale, Time.unscaledDeltaTime * animSpeed);
 
-        // Transición suave de color
         if (useColorTint && tileImage != null)
         {
             tileImage.color = Color.Lerp(tileImage.color, targetColor, Time.unscaledDeltaTime * animSpeed);
         }
     }
 
-    // --- ACTIVAR HOVER (Ratón o Wiimote/Teclado) ---
     public void ActivarHover()
     {
         targetScale = initialScale * hoverScale;

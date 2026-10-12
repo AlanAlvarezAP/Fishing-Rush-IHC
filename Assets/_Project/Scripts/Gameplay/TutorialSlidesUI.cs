@@ -8,25 +8,27 @@ using Unity.Netcode;
 using WiimoteApi;
 #endif
 
-public class TutorialSlidesUI : MonoBehaviour
+public class TutorialSlidesUI : NetworkBehaviour
 {
     [Header("UI del Visor")]
-    [SerializeField] private GameObject panelImagenContenedor;   // El objeto contenedor de la imagen/panel
-    [SerializeField] private Image displayImage;                 // Componente Image donde se muestra la slide
-    [SerializeField] private TextMeshProUGUI slideCounterText;   // Texto "1 / 3"
+    [SerializeField] private GameObject panelImagenContenedor;
+    [SerializeField] private Image displayImage;
+    [SerializeField] private TextMeshProUGUI slideCounterText;
 
     [Header("Las Slides del Tutorial")]
-    [SerializeField] private Sprite[] tutorialSlides;            // Diapositivas en orden
+    [SerializeField] private Sprite[] tutorialSlides;
 
     [Header("Objetos de Escena")]
-    [SerializeField] private GameObject fishSpawnerManager;     // Objeto 'FishSpawnerManager' para apagarlo en el tuto
-    [SerializeField] private GameObject boteObjeto;             // Objeto del Bote
-    [SerializeField] private ThirdPController playerController;  // Controller del Jugador
+    [SerializeField] private GameObject fishSpawnerManager;
+    [SerializeField] private GameObject boteObjeto;
+    [SerializeField] private ThirdPController playerController;
+    [SerializeField] private GameObject canvasGameHUD;
 
     [Header("Configuracion Pesca Cercana")]
-    [SerializeField] private GameObject fishPrefab;            // Prefab 'FishNetworkAnchor'
-    [SerializeField] private Transform[] puntosDeSpawnCercanos;// 2 objetos en el agua cerca del bote
+    [SerializeField] private GameObject fishPrefab;
+    [SerializeField] private Transform[] puntosDeSpawnCercanos;
     [SerializeField] private Transform puntoSpawnLejano;
+
 
     private Vector3 posicionInicialJugador;
 
@@ -92,30 +94,21 @@ public class TutorialSlidesUI : MonoBehaviour
 
         bool keyboardAdvance = Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return);
 
+        if (wiiAJustPressed || keyboardAdvance)
+        {
+            if (IsSpawned && NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening && !IsServer)
+            {
+                ProcesarAvanceServerRpc();
+            }
+            else
+            {
+                ProcesarAvanceLocal();
+            }
+            return;
+        }
+
         switch (estadoActual)
         {
-            case EstadoTutorial.MostrandoSlide:
-                if (wiiAJustPressed || keyboardAdvance)
-                {
-                    if (currentSlideIndex == 0)
-                    {
-                        IniciarPruebaMovimiento();
-                    }
-                    else if (currentSlideIndex == 1)
-                    {
-                        IniciarPruebaPescaCercana();
-                    }
-                    else if (currentSlideIndex == 2)
-                    {
-                        IniciarPruebaPescaLejana();
-                    }
-                    else
-                    {
-                        SiguienteSlide();
-                    }
-                }
-                break;
-
             case EstadoTutorial.ProbandoMovimiento:
                 if (Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.UpArrow) || wiiUp) pressedUp = true;
                 if (Input.GetKeyDown(KeyCode.S) || Input.GetKeyDown(KeyCode.DownArrow) || wiiDown) pressedDown = true;
@@ -135,26 +128,57 @@ public class TutorialSlidesUI : MonoBehaviour
             case EstadoTutorial.ProbandoPescaLejana:
                 VerificarEstadoPescaLejana();
                 break;
+        }
+    }
 
-            case EstadoTutorial.EsperandoSiguienteSlide:
+    [ServerRpc(RequireOwnership = false)]
+    private void ProcesarAvanceServerRpc()
+    {
+        ProcesarAvanceLocal();
+    }
+
+    private void ProcesarAvanceLocal()
+    {
+        switch (estadoActual)
+        {
+            case EstadoTutorial.MostrandoSlide:
+                if (currentSlideIndex == 0) IniciarPruebaMovimiento();
+                else if (currentSlideIndex == 1) IniciarPruebaPescaCercana();
+                else if (currentSlideIndex == 2) IniciarPruebaPescaLejana();
+                else SiguienteSlide();
+                break;
+
+            case EstadoTutorial.ProbandoMovimiento:
+                StartCoroutine(CompletadoMovimientoRoutine());
+                break;
+
+            case EstadoTutorial.ProbandoPescaCercana:
+                StartCoroutine(CompletadoPescaCercanaRoutine());
+                break;
+
+            case EstadoTutorial.ProbandoPescaLejana:
+                StartCoroutine(CompletadoPescaLejanaRoutine());
                 break;
         }
     }
 
     private void IniciarPruebaMovimiento()
     {
+        OcultarUIAllSlides();
+        if (IsServer || IsHost) OcultarSlidesClientRpc();
+
         estadoActual = EstadoTutorial.ProbandoMovimiento;
 
-        if (panelImagenContenedor != null) panelImagenContenedor.SetActive(false);
-        if (displayImage != null) displayImage.gameObject.SetActive(false);
-
         if (boteObjeto != null) boteObjeto.SetActive(true);
-        if (playerController != null) playerController.enabled = true;
 
+        if (playerController != null)
+        {
+            CharacterController cc = playerController.GetComponent<CharacterController>();
+            if (cc != null) cc.enabled = true;
+            playerController.enabled = true;
+        }
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
-
-        Debug.Log("[TUTORIAL] Prueba de movimiento iniciada. Presiona W, A, S, D / Cruceta.");
     }
 
     private IEnumerator CompletadoMovimientoRoutine()
@@ -170,10 +194,34 @@ public class TutorialSlidesUI : MonoBehaviour
 
     private void MostrarSlideActual()
     {
+        MostrarSlideActualLocal();
+        if (IsServer || IsHost) MostrarSlideActualClientRpc(currentSlideIndex);
+    }
+
+    [ClientRpc]
+    private void MostrarSlideActualClientRpc(int slideIndex)
+    {
+        if (!IsServer)
+        {
+            currentSlideIndex = slideIndex;
+            MostrarSlideActualLocal();
+        }
+    }
+
+    private void MostrarSlideActualLocal()
+    {
+        if (canvasGameHUD != null)
+        {
+            CanvasGroup cg = canvasGameHUD.GetComponent<CanvasGroup>();
+            if (cg != null) cg.alpha = 0f;
+            else canvasGameHUD.SetActive(false);
+        }
+        
         estadoActual = EstadoTutorial.MostrandoSlide;
 
         if (panelImagenContenedor != null) panelImagenContenedor.SetActive(true);
         if (displayImage != null) displayImage.gameObject.SetActive(true);
+        if (slideCounterText != null) slideCounterText.gameObject.SetActive(true);
 
         if (tutorialSlides != null && currentSlideIndex < tutorialSlides.Length)
         {
@@ -183,7 +231,7 @@ public class TutorialSlidesUI : MonoBehaviour
 
         if (currentSlideIndex == 1 || currentSlideIndex == 2)
         {
-            if (boteObjeto != null) boteObjeto.SetActive(false);
+            if (boteObjeto != null) boteObjeto.SetActive(true);
 
             if (playerController != null)
             {
@@ -215,6 +263,8 @@ public class TutorialSlidesUI : MonoBehaviour
 
     private void FinalizarTutorial()
     {
+        LimpiarPecesDePrueba();
+
         if (fishSpawnerManager != null) fishSpawnerManager.SetActive(true);
 
         MenuMismaEscena menuManager = FindObjectOfType<MenuMismaEscena>();
@@ -230,10 +280,27 @@ public class TutorialSlidesUI : MonoBehaviour
 
     private void IniciarPruebaPescaCercana()
     {
-        estadoActual = EstadoTutorial.ProbandoPescaCercana;
+        OcultarUIAllSlides();
+        if (IsServer || IsHost) OcultarSlidesClientRpc();
 
-        if (panelImagenContenedor != null) panelImagenContenedor.SetActive(false);
-        if (displayImage != null) displayImage.gameObject.SetActive(false);
+        if (canvasGameHUD != null)
+        {
+            canvasGameHUD.SetActive(true);
+            CanvasGroup cg = canvasGameHUD.GetComponent<CanvasGroup>();
+            if (cg != null)
+            {
+                cg.alpha = 1f;
+                cg.interactable = true;
+                cg.blocksRaycasts = true;
+            }
+        }
+
+        if (FishingHUDManager.Instance != null)
+        {
+            FishingHUDManager.Instance.EnsureCamera();
+        }
+
+        estadoActual = EstadoTutorial.ProbandoPescaCercana;
 
         if (boteObjeto != null) boteObjeto.SetActive(true);
 
@@ -318,17 +385,33 @@ public class TutorialSlidesUI : MonoBehaviour
 
         yield return new WaitForSeconds(1.5f);
 
-        currentSlideIndex = 2; // Mostrar Slide 3 (Pesca lejana)
+        currentSlideIndex = 2;
         MostrarSlideActual();
     }
 
-    // --- FASE 2: PESCA LEJANA (OBLIGA A USAR BOTE) ---
     private void IniciarPruebaPescaLejana()
     {
-        estadoActual = EstadoTutorial.ProbandoPescaLejana;
+        OcultarUIAllSlides();
+        if (IsServer || IsHost) OcultarSlidesClientRpc();
 
-        if (panelImagenContenedor != null) panelImagenContenedor.SetActive(false);
-        if (displayImage != null) displayImage.gameObject.SetActive(false);
+        if (canvasGameHUD != null)
+        {
+            canvasGameHUD.SetActive(true);
+            CanvasGroup cg = canvasGameHUD.GetComponent<CanvasGroup>();
+            if (cg != null)
+            {
+                cg.alpha = 1f;
+                cg.interactable = true;
+                cg.blocksRaycasts = true;
+            }
+        }
+
+        if (FishingHUDManager.Instance != null)
+        {
+            FishingHUDManager.Instance.EnsureCamera();
+        }
+        
+        estadoActual = EstadoTutorial.ProbandoPescaLejana;
 
         if (boteObjeto != null) boteObjeto.SetActive(true);
 
@@ -344,7 +427,6 @@ public class TutorialSlidesUI : MonoBehaviour
 
         conteoPescaLejanaInicial = FishingCounterManager.Instance != null ? FishingCounterManager.Instance.GetFishCount() : 0;
 
-        // Spawnear el pez lejano
         Vector3 spawnPos = (puntoSpawnLejano != null) 
             ? puntoSpawnLejano.position 
             : boteObjeto.transform.position + boteObjeto.transform.forward * 45f;
@@ -352,12 +434,17 @@ public class TutorialSlidesUI : MonoBehaviour
         pezLejano = SpawnearPez(spawnPos);
     }
 
+    [ClientRpc]
+    private void OcultarSlidesClientRpc()
+    {
+        OcultarUIAllSlides();
+    }
+
     private void VerificarEstadoPescaLejana()
     {
         int totalActual = FishingCounterManager.Instance != null ? FishingCounterManager.Instance.GetFishCount() : 0;
         int atrapadosLejanos = totalActual - conteoPescaLejanaInicial;
 
-        // 1. Si capturó el pez lejano -> Completar
         if (atrapadosLejanos >= 1)
         {
             if (pezLejano != null)
@@ -370,7 +457,6 @@ public class TutorialSlidesUI : MonoBehaviour
             return;
         }
 
-        // 2. Si el pez se escapó/despawneó -> Respawnearlo en las coordenadas lejanas
         if (pezLejano == null)
         {
             Vector3 spawnPos = (puntoSpawnLejano != null) 
@@ -388,7 +474,7 @@ public class TutorialSlidesUI : MonoBehaviour
 
         yield return new WaitForSeconds(1.5f);
 
-        currentSlideIndex = 3; // Mostrar Slide 4 ("Tutorial completado")
+        currentSlideIndex = 3;
         MostrarSlideActual();
     }
 
@@ -409,5 +495,51 @@ public class TutorialSlidesUI : MonoBehaviour
         }
 
         return pez;
+    }
+
+    private void OnDisable()
+    {
+        OcultarUIAllSlides();
+
+        if (fishSpawnerManager != null)
+        {
+            fishSpawnerManager.SetActive(true);
+
+            FishSpawner spawner = fishSpawnerManager.GetComponent<FishSpawner>();
+            if (spawner != null && (NetworkManager.Singleton == null || NetworkManager.Singleton.IsServer))
+            {
+                spawner.ReiniciarSpawning();
+            }
+        }
+
+        LimpiarPecesDePrueba();
+    }
+
+    private void LimpiarPecesDePrueba()
+    {
+        if (pecesPorPunto != null)
+        {
+            for (int i = 0; i < pecesPorPunto.Length; i++)
+            {
+                if (pecesPorPunto[i] != null)
+                {
+                    Destroy(pecesPorPunto[i]);
+                    pecesPorPunto[i] = null;
+                }
+            }
+        }
+
+        if (pezLejano != null)
+        {
+            Destroy(pezLejano);
+            pezLejano = null;
+        }
+    }
+
+    private void OcultarUIAllSlides()
+    {
+        if (panelImagenContenedor != null) panelImagenContenedor.SetActive(false);
+        if (displayImage != null) displayImage.gameObject.SetActive(false);
+        if (slideCounterText != null) slideCounterText.gameObject.SetActive(false);
     }
 }

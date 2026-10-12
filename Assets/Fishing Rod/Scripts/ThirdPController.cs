@@ -126,7 +126,9 @@ public class ThirdPController : NetworkBehaviour
     private float debugAccelMag = 0f;
     private float debugAccelY = 0f;
     private float debugCalculatedForce = 12f;
+    #pragma warning disable CS0414
     private string debugState = "Iniciando...";
+    #pragma warning restore CS0414
 
     public bool CanFishBite()
     {
@@ -141,8 +143,14 @@ public class ThirdPController : NetworkBehaviour
     void Start()
     {
         controller = GetComponent<CharacterController>();
-        // NOTA: Se removió el bloqueo de cursor de aquí para evitar interferir con el Menú Principal.
+
+        if (camera == null && Camera.main != null)
+        {
+            camera = Camera.main.transform;
+        }
+
         cinput = GetComponent<CharacterInputController>();
+
         if (animator != null) animator.SetBool("startFishing", false);
         if (fishingRod != null) fishingRod.SetActive(false);
 
@@ -179,8 +187,7 @@ public class ThirdPController : NetworkBehaviour
     void Update()
     {
         if (!IsOwner) return;
-
-        // Opcional: Permite alternar el cursor con Escape solo si ya estás jugando
+        /*
         if (Input.GetKeyDown(KeyCode.Escape))
         {
             if (Cursor.lockState == CursorLockMode.Locked)
@@ -194,7 +201,7 @@ public class ThirdPController : NetworkBehaviour
                 Cursor.visible = false;
             }
         }
-
+        */
         if (!isFishing) debugState = "No pescando";
         else if (isCastingInProcess) debugState = "Cargando tiro...";
         else if (isReeling) debugState = "Recogiendo...";
@@ -480,14 +487,39 @@ public class ThirdPController : NetworkBehaviour
             if (wiiHorizontal != 0f) horizontal = wiiHorizontal;
             if (wiiVertical != 0f) vertical = wiiVertical;
 
+            Vector3 inputDir = new Vector3(horizontal, 0f, vertical).normalized;
+            targetVelY = Mathf.Clamp01(inputDir.magnitude);
+
+            /*
             targetVelY = Mathf.Clamp01(new Vector2(horizontal, vertical).magnitude);
 
-            Vector3 direction = new Vector3(horizontal, 0, vertical).normalized;
-            if (direction.magnitude >= 0.1f)
+            Transform camTransform = camera != null ? camera : (Camera.main != null ? Camera.main.transform : transform);
+
+            Vector3 camForward = camTransform.forward;
+            camForward.y = 0f;
+            camForward.Normalize();
+
+            Vector3 camRight = camTransform.right;
+            camRight.y = 0f;
+            camRight.Normalize();
+
+            Vector3 moveDirection = (camForward * vertical + camRight * horizontal).normalized;
+            */
+
+            //Vector3 direction = new Vector3(horizontal, 0, vertical).normalized;
+            if (inputDir.magnitude >= 0.1f)
             {
-                float targetAngle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg + camera.eulerAngles.y;
+                Transform camTransform = camera != null ? camera : (Camera.main != null ? Camera.main.transform : transform);
+
+                float targetAngle = Mathf.Atan2(inputDir.x, inputDir.z) * Mathf.Rad2Deg + camTransform.eulerAngles.y;
                 float angle = Mathf.SmoothDampAngle(transform.eulerAngles.y, targetAngle, ref turnSmoothingVelocity, turnSmoothingTime);
+
                 transform.rotation = Quaternion.Euler(0f, angle, 0f);
+
+                if (animator != null && animator.transform != transform)
+                {
+                    animator.transform.localRotation = Quaternion.identity;
+                }
 
                 Vector3 moveDirection = Quaternion.Euler(0f, targetAngle, 0f) * Vector3.forward;
 
