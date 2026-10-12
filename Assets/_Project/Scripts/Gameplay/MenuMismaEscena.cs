@@ -25,7 +25,7 @@ public class MenuMismaEscena : NetworkBehaviour
     public GameObject boteObjeto;
     public GameObject rodObjeto;
 
-    [Header("Botones Menú Principal")]
+    [Header("Botones Menu Principal")]
     public Button btnJugar;
     public Button btnWiimote;
     public Button btnTutorial;
@@ -37,7 +37,13 @@ public class MenuMismaEscena : NetworkBehaviour
 
     [SerializeField] private TextMeshProUGUI finalScoreText;
 
-    private Button[] activeButtons; // Array dinámico según la pantalla activa
+    private Vector3 botePosInicial;
+    private Quaternion boteRotInicial;
+    private Vector3 jugadorPosInicial;
+    private Quaternion jugadorRotInicial;
+    private bool posicionesGuardadas = false;
+
+    private Button[] activeButtons;
     private int selectedButtonIndex = 0;
 
     private bool wasWiiA = false;
@@ -69,17 +75,17 @@ public class MenuMismaEscena : NetworkBehaviour
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
+        GuardarPosicionesIniciales();
+
         ApagarJugador();
         MostrarMenu();
     }
 
     void Update()
     {
-        // 1. Verificar si hay algún subpanel de tutorial o wiimote abierto
         bool subPanelAbierto = (panelTutorial != null && panelTutorial.activeSelf) ||
                               (panelWiimote != null && panelWiimote.activeSelf);
 
-        // 2. Permitir el Update si el menú principal O el gameOver están activos
         bool menuActivo = canvasMenu != null && canvasMenu.activeInHierarchy;
         bool gameOverActivo = canvasGameOver != null && canvasGameOver.activeInHierarchy;
 
@@ -158,6 +164,8 @@ public class MenuMismaEscena : NetworkBehaviour
     {
         Time.timeScale = 1f;
 
+        ResetearPosicionesOriginales();
+
         if (FishingCounterManager.Instance != null)
         {
             FishingCounterManager.Instance.ResetCounter();
@@ -214,6 +222,7 @@ public class MenuMismaEscena : NetworkBehaviour
 
     public void AbrirTutorial()
     {
+        if (canvasMenu != null) canvasMenu.SetActive(false);
         if (panelWiimote != null) panelWiimote.SetActive(false);
         if (panelTutorial != null) panelTutorial.SetActive(true);
 
@@ -223,6 +232,7 @@ public class MenuMismaEscena : NetworkBehaviour
     public void CerrarPanelTutorial()
     {
         if (panelTutorial != null) panelTutorial.SetActive(false);
+        ResetearPosicionesOriginales();
         MostrarMenu();
     }
 
@@ -251,7 +261,6 @@ public class MenuMismaEscena : NetworkBehaviour
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
-        // Asignar botones del Menú Principal
         activeButtons = new Button[] { btnJugar, btnWiimote, btnTutorial, btnSalir };
         selectedButtonIndex = 0;
 
@@ -279,7 +288,6 @@ public class MenuMismaEscena : NetworkBehaviour
 
         Time.timeScale = 0f;
 
-        // Asignar botones de GameOver
         activeButtons = new Button[] { btnReiniciar, btnVolverMenu };
         selectedButtonIndex = 0;
 
@@ -323,6 +331,55 @@ public class MenuMismaEscena : NetworkBehaviour
         foreach (var p in players)
         {
             if (p != null) p.enabled = false;
+        }
+    }
+    private void GuardarPosicionesIniciales()
+    {
+        if (posicionesGuardadas) return;
+
+        if (boteObjeto != null)
+        {
+            botePosInicial = boteObjeto.transform.position;
+            boteRotInicial = boteObjeto.transform.rotation;
+        }
+
+        GarantizarJugador();
+        if (playerController != null)
+        {
+            jugadorPosInicial = playerController.transform.position;
+            jugadorRotInicial = playerController.transform.rotation;
+        }
+
+        posicionesGuardadas = true;
+    }
+
+    public void ResetearPosicionesOriginales()
+    {
+        GuardarPosicionesIniciales();
+
+        if (boteObjeto != null)
+        {
+            boteObjeto.transform.position = botePosInicial;
+            boteObjeto.transform.rotation = boteRotInicial;
+
+            Rigidbody rbBote = boteObjeto.GetComponent<Rigidbody>();
+            if (rbBote != null)
+            {
+                rbBote.velocity = Vector3.zero;
+                rbBote.angularVelocity = Vector3.zero;
+            }
+        }
+
+        GarantizarJugador();
+        if (playerController != null)
+        {
+            CharacterController cc = playerController.GetComponent<CharacterController>();
+            if (cc != null) cc.enabled = false;
+
+            playerController.transform.position = jugadorPosInicial;
+            playerController.transform.rotation = jugadorRotInicial;
+
+            if (cc != null) cc.enabled = true;
         }
     }
 }

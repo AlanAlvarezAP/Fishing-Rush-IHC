@@ -8,7 +8,7 @@ public class FishingCounterManager : MonoBehaviour
     [Header("Componentes UI")]
     [SerializeField] private TextMeshProUGUI fishCounterText;
 
-    [Header("Configuración")]
+    [Header("Configuracion")]
     [SerializeField] private string prefix = "Peces atrapados: ";
 
     private int fishCount = 0;

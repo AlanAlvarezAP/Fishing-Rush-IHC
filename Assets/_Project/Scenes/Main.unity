@@ -144,7 +144,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 22400762, guid: 67117722a812a2e46ab8cb8eafbf5f5e, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -0.000038146973
+      value: -0.000019073486
       objectReference: {fileID: 0}
     - target: {fileID: 22426080, guid: 67117722a812a2e46ab8cb8eafbf5f5e, type: 3}
       propertyPath: m_AnchorMax.x
@@ -1224,7 +1224,7 @@ GameObject:
   m_Component:
   - component: {fileID: 131964329}
   m_Layer: 5
-  m_Name: Tile_Tuto
+  m_Name: panelImageContainer
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1374,7 +1374,19 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 198668055}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 1987106947}
+        m_TargetAssemblyTypeName: MenuMismaEscena, Assembly-CSharp
+        m_MethodName: AbrirTutorial
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!114 &198668058
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2474,12 +2486,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0cd44c1031e13a943bb63640046fad76, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_UiScaleMode: 0
+  m_UiScaleMode: 1
   m_ReferencePixelsPerUnit: 100
   m_ScaleFactor: 1
-  m_ReferenceResolution: {x: 800, y: 600}
+  m_ReferenceResolution: {x: 1920, y: 1080}
   m_ScreenMatchMode: 0
-  m_MatchWidthOrHeight: 0
+  m_MatchWidthOrHeight: 0.5
   m_PhysicalUnit: 3
   m_FallbackScreenDPI: 96
   m_DefaultSpriteDPI: 96
@@ -2505,8 +2517,8 @@ Canvas:
   m_VertexColorAlwaysGammaSpace: 0
   m_AdditionalShaderChannelsFlag: 25
   m_UpdateRectTransformForStandalone: 0
-  m_SortingLayerID: 0
-  m_SortingOrder: 0
+  m_SortingLayerID: 650487009
+  m_SortingOrder: 10
   m_TargetDisplay: 0
 --- !u!114 &274274319
 MonoBehaviour:
@@ -2520,13 +2532,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 46760e8d9d31ba84092e0c889193d1e7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  panelImagenContenedor: {fileID: 131964328}
   displayImage: {fileID: 703247888}
   slideCounterText: {fileID: 0}
   tutorialSlides:
-  - {fileID: 21300000, guid: 8cdf8214322236745a1babed982de2d5, type: 3}
-  - {fileID: 21300000, guid: 48840bde15fb401448ab8f7f3b62a1cc, type: 3}
-  - {fileID: 21300000, guid: 419682483679aae4cb49e30456f66c42, type: 3}
-  enableCooldown: 0.3
+  - {fileID: 21300000, guid: e7819ba3bd5a6eb4bb21402c431bfa2d, type: 3}
+  - {fileID: 21300000, guid: ba1c8f3d6985bf7409ec0c906fb8e96d, type: 3}
+  - {fileID: 21300000, guid: 45d33d0421c77304e8977de7fc12d7c8, type: 3}
+  - {fileID: 21300000, guid: 0d1bf38f3d810ac4aa0580ab086d1c32, type: 3}
+  fishSpawnerManager: {fileID: 69493303}
+  boteObjeto: {fileID: 1294114531}
+  playerController: {fileID: 8523933818799061779}
+  fishPrefab: {fileID: 1019849492310305838, guid: 7a71d98eb705f8d4eb8daad12f17752b,
+    type: 3}
+  puntosDeSpawnCercanos:
+  - {fileID: 628805747}
+  - {fileID: 1265938318}
+  puntoSpawnLejano: {fileID: 349616010}
 --- !u!1 &309219689
 GameObject:
   m_ObjectHideFlags: 0
@@ -2700,7 +2722,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &324470321
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2893,6 +2915,37 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 344096707}
   m_CullTransparentMesh: 1
+--- !u!1 &349616009
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 349616010}
+  m_Layer: 0
+  m_Name: TutorialFishSpawn_3
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &349616010
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 349616009}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -10, y: -3.5, z: -95}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &358093438
 GameObject:
   m_ObjectHideFlags: 0
@@ -5782,7 +5835,7 @@ PrefabInstance:
     - target: {fileID: 5108012949281360536, guid: 7a71d98eb705f8d4eb8daad12f17752b,
         type: 3}
       propertyPath: m_LocalPosition.x
-      value: -3
+      value: 0.97
       objectReference: {fileID: 0}
     - target: {fileID: 5108012949281360536, guid: 7a71d98eb705f8d4eb8daad12f17752b,
         type: 3}
@@ -5792,7 +5845,7 @@ PrefabInstance:
     - target: {fileID: 5108012949281360536, guid: 7a71d98eb705f8d4eb8daad12f17752b,
         type: 3}
       propertyPath: m_LocalPosition.z
-      value: 25
+      value: 19.17
       objectReference: {fileID: 0}
     - target: {fileID: 5108012949281360536, guid: 7a71d98eb705f8d4eb8daad12f17752b,
         type: 3}
@@ -5876,7 +5929,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &566578028
 RectTransform:
   m_ObjectHideFlags: 0
@@ -6264,6 +6317,37 @@ RectTransform:
   m_AnchoredPosition: {x: -7, y: 0}
   m_SizeDelta: {x: 400, y: 200}
   m_Pivot: {x: 1, y: 1}
+--- !u!1 &628805746
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 628805747}
+  m_Layer: 0
+  m_Name: TutorialFishSpawn_1
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &628805747
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 628805746}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -15, y: -3.5, z: -1}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &631158327
 GameObject:
   m_ObjectHideFlags: 0
@@ -10608,7 +10692,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 1987106947}
         m_TargetAssemblyTypeName: MenuMismaEscena, Assembly-CSharp
-        m_MethodName: AbrirTutorial
+        m_MethodName: VolverAlMenuPrincipal
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -11388,6 +11472,37 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1260720722}
   m_CullTransparentMesh: 1
+--- !u!1 &1265938317
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1265938318}
+  m_Layer: 0
+  m_Name: TutorialFishSpawn_2
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1265938318
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1265938317}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 30, y: -3.5, z: -1}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1279755643
 GameObject:
   m_ObjectHideFlags: 0
@@ -11679,6 +11794,8 @@ MonoBehaviour:
   timonAnchor: {fileID: 1618682680}
   deckAnchor: {fileID: 411383305}
   toggleKey: 102
+  playerController: {fileID: 8523933818799061779}
+  playerObject: {fileID: 8523933818799061776}
 --- !u!114 &1294114533
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -12116,7 +12233,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1361040626
 RectTransform:
   m_ObjectHideFlags: 0
@@ -13365,99 +13482,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2094232806}
   m_LocalEulerAnglesHint: {x: 0, y: -90, z: 0}
---- !u!1001 &1620829226
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 0}
-    m_Modifications:
-    - target: {fileID: 85560901741823911, guid: 7a71d98eb705f8d4eb8daad12f17752b,
-        type: 3}
-      propertyPath: m_AnchorMax.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 85560901741823911, guid: 7a71d98eb705f8d4eb8daad12f17752b,
-        type: 3}
-      propertyPath: m_AnchorMax.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1019849492310305838, guid: 7a71d98eb705f8d4eb8daad12f17752b,
-        type: 3}
-      propertyPath: m_Name
-      value: FishNetworkAnchor (1)
-      objectReference: {fileID: 0}
-    - target: {fileID: 5108012949281360536, guid: 7a71d98eb705f8d4eb8daad12f17752b,
-        type: 3}
-      propertyPath: m_LocalPosition.x
-      value: 15
-      objectReference: {fileID: 0}
-    - target: {fileID: 5108012949281360536, guid: 7a71d98eb705f8d4eb8daad12f17752b,
-        type: 3}
-      propertyPath: m_LocalPosition.y
-      value: -3.5
-      objectReference: {fileID: 0}
-    - target: {fileID: 5108012949281360536, guid: 7a71d98eb705f8d4eb8daad12f17752b,
-        type: 3}
-      propertyPath: m_LocalPosition.z
-      value: 20
-      objectReference: {fileID: 0}
-    - target: {fileID: 5108012949281360536, guid: 7a71d98eb705f8d4eb8daad12f17752b,
-        type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 5108012949281360536, guid: 7a71d98eb705f8d4eb8daad12f17752b,
-        type: 3}
-      propertyPath: m_LocalRotation.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 5108012949281360536, guid: 7a71d98eb705f8d4eb8daad12f17752b,
-        type: 3}
-      propertyPath: m_LocalRotation.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 5108012949281360536, guid: 7a71d98eb705f8d4eb8daad12f17752b,
-        type: 3}
-      propertyPath: m_LocalRotation.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 5108012949281360536, guid: 7a71d98eb705f8d4eb8daad12f17752b,
-        type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 5108012949281360536, guid: 7a71d98eb705f8d4eb8daad12f17752b,
-        type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 5108012949281360536, guid: 7a71d98eb705f8d4eb8daad12f17752b,
-        type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 7100078359079121170, guid: 7a71d98eb705f8d4eb8daad12f17752b,
-        type: 3}
-      propertyPath: showDebug
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 8200979598145920181, guid: 7a71d98eb705f8d4eb8daad12f17752b,
-        type: 3}
-      propertyPath: GlobalObjectIdHash
-      value: 231812399
-      objectReference: {fileID: 0}
-    - target: {fileID: 8200979598145920181, guid: 7a71d98eb705f8d4eb8daad12f17752b,
-        type: 3}
-      propertyPath: InScenePlacedSourceGlobalObjectIdHash
-      value: 4002266730
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: 7a71d98eb705f8d4eb8daad12f17752b, type: 3}
 --- !u!1 &1640194203
 GameObject:
   m_ObjectHideFlags: 0
@@ -13835,7 +13859,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: -42.50003, y: 91.20001}
+  m_AnchoredPosition: {x: -42.5, y: 91.20001}
   m_SizeDelta: {x: 400, y: 200}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &1686970026
@@ -16384,11 +16408,13 @@ SceneRoots:
   - {fileID: 716308038}
   - {fileID: 1747233856}
   - {fileID: 549144252}
-  - {fileID: 1620829226}
   - {fileID: 1294114534}
   - {fileID: 445374689}
+  - {fileID: 274274315}
   - {fileID: 1669568781}
   - {fileID: 523132401}
   - {fileID: 1987106948}
   - {fileID: 855104440}
-  - {fileID: 274274315}
+  - {fileID: 628805747}
+  - {fileID: 1265938318}
+  - {fileID: 349616010}
