@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using Unity.Netcode;
+using TMPro;
 
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR
 using WiimoteApi;
@@ -24,13 +25,19 @@ public class MenuMismaEscena : NetworkBehaviour
     public GameObject boteObjeto;
     public GameObject rodObjeto;
 
-    [Header("Botones de los 4 Tiles (Para navegacion con Wiimote)")]
+    [Header("Botones Menú Principal")]
     public Button btnJugar;
     public Button btnWiimote;
     public Button btnTutorial;
     public Button btnSalir;
 
-    private Button[] menuButtons;
+    [Header("Botones GameOver")]
+    public Button btnReiniciar;
+    public Button btnVolverMenu;
+
+    [SerializeField] private TextMeshProUGUI finalScoreText;
+
+    private Button[] activeButtons; // Array dinámico según la pantalla activa
     private int selectedButtonIndex = 0;
 
     private bool wasWiiA = false;
@@ -39,14 +46,13 @@ public class MenuMismaEscena : NetworkBehaviour
 
     void Awake()
     {
-        // Forzamos el apagado inmediato mediante CanvasGroup para evitar bugs visuales
         if (canvasGameHUD != null)
         {
             CanvasGroup cg = canvasGameHUD.GetComponent<CanvasGroup>();
             if (cg == null) cg = canvasGameHUD.AddComponent<CanvasGroup>();
-            cg.alpha = 0f; // Lo hace invisible
-            cg.interactable = false; // Evita clics
-            cg.blocksRaycasts = false; // Evita que bloquee otros botones
+            cg.alpha = 0f;
+            cg.interactable = false;
+            cg.blocksRaycasts = false;
         }
 
         if (canvasGameOver != null) canvasGameOver.SetActive(false);
@@ -58,8 +64,6 @@ public class MenuMismaEscena : NetworkBehaviour
 
     void Start()
     {
-        menuButtons = new Button[] { btnJugar, btnWiimote, btnTutorial, btnSalir };
-
         Time.timeScale = 1f;
 
         Cursor.lockState = CursorLockMode.None;
@@ -71,12 +75,15 @@ public class MenuMismaEscena : NetworkBehaviour
 
     void Update()
     {
-        // BLOQUEO: Si el tutorial o el panel de Wiimote est�n abiertos, 
-        // ignoramos el Update del men� para que la tecla A no haga clics fantasma en el fondo.
+        // 1. Verificar si hay algún subpanel de tutorial o wiimote abierto
         bool subPanelAbierto = (panelTutorial != null && panelTutorial.activeSelf) ||
                               (panelWiimote != null && panelWiimote.activeSelf);
 
-        if (subPanelAbierto || canvasMenu == null || !canvasMenu.activeInHierarchy) return;
+        // 2. Permitir el Update si el menú principal O el gameOver están activos
+        bool menuActivo = canvasMenu != null && canvasMenu.activeInHierarchy;
+        bool gameOverActivo = canvasGameOver != null && canvasGameOver.activeInHierarchy;
+
+        if (subPanelAbierto || (!menuActivo && !gameOverActivo)) return;
 
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR
         if (WiimoteManager.HasWiimote() && WiimoteManager.Wiimotes.Count > 0)
@@ -111,20 +118,20 @@ public class MenuMismaEscena : NetworkBehaviour
 
     private void CambiarSeleccion(int direccion)
     {
-        if (menuButtons == null || menuButtons.Length == 0) return;
+        if (activeButtons == null || activeButtons.Length == 0) return;
 
-        selectedButtonIndex = (selectedButtonIndex + direccion + menuButtons.Length) % menuButtons.Length;
-        if (menuButtons[selectedButtonIndex] != null)
+        selectedButtonIndex = (selectedButtonIndex + direccion + activeButtons.Length) % activeButtons.Length;
+        if (activeButtons[selectedButtonIndex] != null)
         {
-            menuButtons[selectedButtonIndex].Select();
+            activeButtons[selectedButtonIndex].Select();
         }
     }
 
     private void EjecutarBotonSeleccionado()
     {
-        if (menuButtons != null && menuButtons[selectedButtonIndex] != null)
+        if (activeButtons != null && activeButtons[selectedButtonIndex] != null)
         {
-            menuButtons[selectedButtonIndex].onClick.Invoke();
+            activeButtons[selectedButtonIndex].onClick.Invoke();
         }
     }
 
@@ -151,6 +158,11 @@ public class MenuMismaEscena : NetworkBehaviour
     {
         Time.timeScale = 1f;
 
+        if (FishingCounterManager.Instance != null)
+        {
+            FishingCounterManager.Instance.ResetCounter();
+        }
+
         if (canvasMenu != null) canvasMenu.SetActive(false);
         if (canvasGameOver != null) canvasGameOver.SetActive(false);
         if (panelWiimote != null) panelWiimote.SetActive(false);
@@ -160,6 +172,7 @@ public class MenuMismaEscena : NetworkBehaviour
 
         if (canvasGameHUD != null)
         {
+            canvasGameHUD.SetActive(true);
             CanvasGroup cg = canvasGameHUD.GetComponent<CanvasGroup>();
             if (cg != null)
             {
@@ -186,6 +199,7 @@ public class MenuMismaEscena : NetworkBehaviour
 
     public void AbrirWiimote()
     {
+        if (canvasMenu != null) canvasMenu.SetActive(false);
         if (panelTutorial != null) panelTutorial.SetActive(false);
         if (panelWiimote != null) panelWiimote.SetActive(true);
 
@@ -200,7 +214,6 @@ public class MenuMismaEscena : NetworkBehaviour
 
     public void AbrirTutorial()
     {
-        Debug.Log("[Menu] AbrirTutorial llamado. panelTutorial = " + (panelTutorial != null ? panelTutorial.name : "NULL"));
         if (panelWiimote != null) panelWiimote.SetActive(false);
         if (panelTutorial != null) panelTutorial.SetActive(true);
 
@@ -215,7 +228,6 @@ public class MenuMismaEscena : NetworkBehaviour
 
     public void SalirDelJuego()
     {
-        Debug.Log("Cerrando el juego...");
 #if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying = false;
 #else
@@ -239,15 +251,24 @@ public class MenuMismaEscena : NetworkBehaviour
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
-        if (menuButtons != null && menuButtons.Length > 0 && menuButtons[0] != null)
+        // Asignar botones del Menú Principal
+        activeButtons = new Button[] { btnJugar, btnWiimote, btnTutorial, btnSalir };
+        selectedButtonIndex = 0;
+
+        if (activeButtons.Length > 0 && activeButtons[0] != null)
         {
-            menuButtons[0].Select();
-            selectedButtonIndex = 0;
+            activeButtons[0].Select();
         }
     }
 
     public void MostrarGameOver()
     {
+        if (finalScoreText != null && FishingCounterManager.Instance != null)
+        {
+            int score = FishingCounterManager.Instance.GetFishCount();
+            finalScoreText.text = $"Score final: {score}";
+        }
+
         if (canvasGameHUD != null) canvasGameHUD.SetActive(false);
         if (canvasGameOver != null) canvasGameOver.SetActive(true);
 
@@ -257,6 +278,15 @@ public class MenuMismaEscena : NetworkBehaviour
         Cursor.visible = true;
 
         Time.timeScale = 0f;
+
+        // Asignar botones de GameOver
+        activeButtons = new Button[] { btnReiniciar, btnVolverMenu };
+        selectedButtonIndex = 0;
+
+        if (activeButtons.Length > 0 && activeButtons[0] != null)
+        {
+            activeButtons[0].Select();
+        }
     }
 
     public void ReiniciarJuego()

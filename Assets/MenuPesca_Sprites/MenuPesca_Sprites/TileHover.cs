@@ -2,21 +2,25 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-public class TileHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, IPointerUpHandler
+public class TileHover : MonoBehaviour,
+    IPointerEnterHandler, IPointerExitHandler,
+    IPointerDownHandler, IPointerUpHandler,
+    ISelectHandler, IDeselectHandler
 {
     [Header("Borde / Marcador Visual")]
-    public GameObject outlineObject; // Arrastra aquí el objeto 'BordeLuminoso'
+    public GameObject outlineObject; // Objeto del borde (ej. 'BordeLuminoso')
 
     [Header("Configuración de Escalado")]
-    public float hoverScale = 50.0f;  // Ligeramente más grande para que se note más
-    public float pressScale = 0.92f;
+    [Range(1.0f, 1.3f)]
+    public float hoverScale = 1.10f;  // 1.10 = 10% más grande (Escala clara y visible)
+    public float pressScale = 0.95f;  // Se contrae levemente al presionar
     public float animSpeed = 15f;
 
-    [Header("Configuración de Color (Feedback Visual)")]
+    [Header("Configuración de Color")]
     public bool useColorTint = true;
     public Color normalColor = Color.white;
-    public Color hoverColor = new Color(10.5f, 10.5f, 10.5f, 1f); // Un poco más brillante
-    public Color pressColor = new Color(0.85f, 0.85f, 0.85f, 1f);  // Un poco más oscuro al presionar
+    public Color hoverColor = new Color(1f, 1f, 0.8f, 1f); // Tono amarillo suave/brillante
+    public Color pressColor = new Color(0.7f, 0.7f, 0.7f, 1f);
 
     private Vector3 targetScale;
     private Vector3 initialScale;
@@ -28,7 +32,6 @@ public class TileHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandle
         initialScale = transform.localScale;
         targetScale = initialScale;
 
-        // Intentar obtener el componente Image del propio objeto o buscarlo
         tileImage = GetComponent<Image>();
         if (tileImage != null)
         {
@@ -43,16 +46,17 @@ public class TileHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandle
     void Update()
     {
         // Transición suave de tamaño
-        transform.localScale = Vector3.Lerp(transform.localScale, targetScale, Time.deltaTime * animSpeed);
+        transform.localScale = Vector3.Lerp(transform.localScale, targetScale, Time.unscaledDeltaTime * animSpeed);
 
         // Transición suave de color
         if (useColorTint && tileImage != null)
         {
-            tileImage.color = Color.Lerp(tileImage.color, targetColor, Time.deltaTime * animSpeed);
+            tileImage.color = Color.Lerp(tileImage.color, targetColor, Time.unscaledDeltaTime * animSpeed);
         }
     }
 
-    public void OnPointerEnter(PointerEventData eventData)
+    // --- ACTIVAR HOVER (Ratón o Wiimote/Teclado) ---
+    public void ActivarHover()
     {
         targetScale = initialScale * hoverScale;
         targetColor = hoverColor;
@@ -61,7 +65,8 @@ public class TileHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandle
             outlineObject.SetActive(true);
     }
 
-    public void OnPointerExit(PointerEventData eventData)
+    // --- DESACTIVAR HOVER ---
+    public void DesactivarHover()
     {
         targetScale = initialScale;
         targetColor = normalColor;
@@ -70,15 +75,20 @@ public class TileHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandle
             outlineObject.SetActive(false);
     }
 
+    // Eventos de Mouse
+    public void OnPointerEnter(PointerEventData eventData) => ActivarHover();
+    public void OnPointerExit(PointerEventData eventData) => DesactivarHover();
+
+    // Eventos de Wiimote / Teclado (Cuando el script MenuMismaEscena ejecuta .Select())
+    public void OnSelect(BaseEventData eventData) => ActivarHover();
+    public void OnDeselect(BaseEventData eventData) => DesactivarHover();
+
+    // Clics
     public void OnPointerDown(PointerEventData eventData)
     {
         targetScale = initialScale * pressScale;
         targetColor = pressColor;
     }
 
-    public void OnPointerUp(PointerEventData eventData)
-    {
-        targetScale = initialScale * hoverScale;
-        targetColor = hoverColor;
-    }
+    public void OnPointerUp(PointerEventData eventData) => ActivarHover();
 }
