@@ -24,6 +24,7 @@ public class BoatDriverToggle : NetworkBehaviour
     private CharacterController characterController;
 
     private bool isDriving = false;
+    public bool IsDriving => isDriving;
     private bool wasWiiOne = false;
 
     //private NetworkVariable<bool> isDrivingNet = new NetworkVariable<bool>(

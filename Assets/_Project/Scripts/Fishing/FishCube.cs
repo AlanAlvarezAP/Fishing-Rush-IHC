@@ -474,11 +474,15 @@ public class FishCube : NetworkBehaviour
                 successfulFollows++;
                 if (showDebug) Debug.Log($"--> ¡ÉXITO! Gesto correcto.");
                 if (ui != null) ui.ShowFeedback(true);
+
+                if (playerController != null) playerController.ReproducirResultadoPatron(true);
             }
             else
             {
                 if (showDebug) Debug.Log($"--> FALLO: El tiempo se agotó.");
                 if (ui != null) ui.ShowFeedback(false);
+
+                if (playerController != null) playerController.ReproducirResultadoPatron(false);
             }
 
             if (playerController != null)

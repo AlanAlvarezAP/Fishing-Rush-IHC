@@ -38,7 +38,24 @@ public class MenuMismaEscena : NetworkBehaviour
     public Button btnReiniciar;
     public Button btnVolverMenu;
 
+    [Header("Nuevo Panel Inicial")]
+    public GameObject panelIniciarMenu;
+    public Button btnIniciarTutorial;
+    public Button btnIniciarSalir;
+
+    private bool tutorialCompletado = false;
+
+
     [SerializeField] private TextMeshProUGUI finalScoreText;
+
+    [Header("UI Estado Jugador")]
+    public TextMeshProUGUI txtEstadoJugador;
+
+    [Header("Control de Audio BGM")]
+    public AudioSource bgmSource;
+    [Range(0f, 1f)] public float volumenMenu = 1.0f;
+    [Range(0f, 1f)] public float volumenJuego = 0.3f;
+    private Coroutine rutinaVolumen;
 
     private Vector3 botePosInicial;
     private Quaternion boteRotInicial;
@@ -65,6 +82,7 @@ public class MenuMismaEscena : NetworkBehaviour
     {
         selectedButtonIndexNet.OnValueChanged += (oldVal, newVal) =>
         {
+            selectedButtonIndex = newVal;
             ResaltarBotonLocal(newVal);
         };
 
@@ -118,6 +136,13 @@ public class MenuMismaEscena : NetworkBehaviour
 
     void Update()
     {
+        ActualizarTextoEstadoHUD();
+        if (Input.GetKeyDown(KeyCode.T))
+        {
+            tutorialCompletado = !tutorialCompletado;
+            MostrarMenuLocal();
+        }
+
         if (Input.GetKeyDown(KeyCode.Escape))
         {
             if (panelTutorial != null && panelTutorial.activeSelf)
@@ -187,35 +212,47 @@ public class MenuMismaEscena : NetworkBehaviour
         if (Input.GetKeyDown(KeyCode.S) || Input.GetKeyDown(KeyCode.DownArrow)) CambiarSeleccion(1);
         if (Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.UpArrow)) CambiarSeleccion(-1);
         if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) EjecutarBotonSeleccionado();
+
+        
     }
 
     private void CambiarSeleccion(int direccion)
     {
         if (activeButtons == null || activeButtons.Length == 0) return;
 
-        int newIndex = (selectedButtonIndexNet.Value + direccion + activeButtons.Length) % activeButtons.Length;
+        selectedButtonIndex = (selectedButtonIndex + direccion + activeButtons.Length) % activeButtons.Length;
+        ResaltarBotonLocal(selectedButtonIndex);
 
         if (IsOwner || IsServer)
         {
-            selectedButtonIndexNet.Value = newIndex;
+            selectedButtonIndexNet.Value = selectedButtonIndex;
         }
     }
 
     private void EjecutarBotonSeleccionado()
     {
-        if (activeButtons != null && activeButtons[selectedButtonIndex] != null)
+        if (activeButtons != null && selectedButtonIndex >= 0 && selectedButtonIndex < activeButtons.Length && activeButtons[selectedButtonIndex] != null)
         {
             activeButtons[selectedButtonIndex].onClick.Invoke();
         }
     }
 
+    [ServerRpc(RequireOwnership = false)]
+    private void EmpezarJuegoServerRpc()
+    {
+        OcultarMenuYEmpezarLocal();
+        EmpezarJuegoClientRpc();
+    }
     public void EmpezarJuego()
     {
         OcultarMenuYEmpezarLocal();
 
-        if (IsServer || IsHost)
+        if (IsSpawned)
         {
-            EmpezarJuegoClientRpc();
+            if (IsServer || IsHost)
+                EmpezarJuegoClientRpc();
+            else
+                EmpezarJuegoServerRpc();
         }
     }
 
@@ -230,6 +267,7 @@ public class MenuMismaEscena : NetworkBehaviour
 
     private void OcultarMenuYEmpezarLocal()
     {
+        AjustarVolumenMusica(volumenJuego);
         Time.timeScale = 1f;
 
         ResetearPosicionesOriginales();
@@ -277,7 +315,7 @@ public class MenuMismaEscena : NetworkBehaviour
     public void AbrirWiimote()
     {
         AbrirWiimoteLocal();
-        if (IsServer || IsHost) AbrirWiimoteClientRpc();
+        if (IsSpawned && (IsSpawned && (IsServer || IsHost))) AbrirWiimoteClientRpc();
     }
 
     [ClientRpc]
@@ -289,6 +327,7 @@ public class MenuMismaEscena : NetworkBehaviour
     private void AbrirWiimoteLocal()
     {
         if (canvasMenu != null) canvasMenu.SetActive(true);
+        if (panelIniciarMenu != null) panelIniciarMenu.SetActive(false);
         if (panelMenuPrincipal != null) panelMenuPrincipal.SetActive(false);
         if (panelTutorial != null) panelTutorial.SetActive(false);
         if (panelWiimote != null) panelWiimote.SetActive(true);
@@ -302,7 +341,7 @@ public class MenuMismaEscena : NetworkBehaviour
     public void CerrarPanelWiimote()
     {
         CerrarPanelWiimoteLocal();
-        if (IsServer || IsHost) CerrarPanelWiimoteClientRpc();
+        if (IsSpawned && (IsServer || IsHost)) CerrarPanelWiimoteClientRpc();
     }
 
     [ClientRpc]
@@ -321,7 +360,7 @@ public class MenuMismaEscena : NetworkBehaviour
     public void AbrirTutorial()
     {
         AbrirTutorialLocal();
-        if (IsServer || IsHost) AbrirTutorialClientRpc();
+        if (IsSpawned && (IsSpawned && (IsServer || IsHost))) AbrirTutorialClientRpc();
     }
 
     [ClientRpc]
@@ -332,7 +371,10 @@ public class MenuMismaEscena : NetworkBehaviour
 
     private void AbrirTutorialLocal()
     {
+        AjustarVolumenMusica(volumenJuego);
+
         if (canvasMenu != null) canvasMenu.SetActive(true);
+        if (panelIniciarMenu != null) panelIniciarMenu.SetActive(false);
         if (panelMenuPrincipal != null) panelMenuPrincipal.SetActive(false);
         if (panelWiimote != null) panelWiimote.SetActive(false);
         if (panelTutorial != null) panelTutorial.SetActive(true);
@@ -348,7 +390,7 @@ public class MenuMismaEscena : NetworkBehaviour
     public void CerrarPanelTutorial()
     {
         CerrarPanelTutorialLocal();
-        if (IsServer || IsHost) CerrarPanelTutorialClientRpc();
+        if (IsSpawned && (IsServer || IsHost)) CerrarPanelTutorialClientRpc();
     }
 
     [ClientRpc]
@@ -361,6 +403,7 @@ public class MenuMismaEscena : NetworkBehaviour
     {
         if (panelTutorial != null) panelTutorial.SetActive(false);
         ResetearPosicionesOriginales();
+        tutorialCompletado = true;
         MostrarMenuLocal();
     }
 
@@ -376,7 +419,7 @@ public class MenuMismaEscena : NetworkBehaviour
     public void MostrarMenu()
     {
         MostrarMenuLocal();
-        if (IsServer || IsHost) SincronizarMenuClientRpc();
+        if (IsSpawned && (IsServer || IsHost)) SincronizarMenuClientRpc();
     }
 
     [ClientRpc]
@@ -387,6 +430,7 @@ public class MenuMismaEscena : NetworkBehaviour
 
     private void MostrarMenuLocal()
     {
+        AjustarVolumenMusica(volumenMenu);
         Time.timeScale = 1f;
 
         if (canvasMenu != null) canvasMenu.SetActive(true);
@@ -402,13 +446,25 @@ public class MenuMismaEscena : NetworkBehaviour
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
-        activeButtons = new Button[] { btnJugar, btnWiimote, btnTutorial, btnSalir };
+        if (!tutorialCompletado && panelIniciarMenu != null)
+        {
+            if (panelMenuPrincipal != null) panelMenuPrincipal.SetActive(false);
+            panelIniciarMenu.SetActive(true);
+            activeButtons = new Button[] { btnIniciarTutorial, btnIniciarSalir };
+        }
+        else
+        {
+            if (panelIniciarMenu != null) panelIniciarMenu.SetActive(false);
+            if (panelMenuPrincipal != null) panelMenuPrincipal.SetActive(true);
+            activeButtons = new Button[] { btnJugar, btnWiimote, btnTutorial, btnSalir };
+        }
+
         selectedButtonIndex = 0;
 
         if (activeButtons.Length > 0 && activeButtons[0] != null)
         {
             activeButtons[0].Select();
-            if (IsServer || IsHost)
+            if (IsSpawned && (IsServer || IsHost))
             {
                 SincronizarSeleccionBotonClientRpc(0);
             }
@@ -419,7 +475,7 @@ public class MenuMismaEscena : NetworkBehaviour
     {
         if (canvasGameOver != null && canvasGameOver.activeSelf) return;
         MostrarGameOverLocal();
-        if (IsServer || IsHost) SincronizarGameOverClientRpc();
+        if (IsSpawned && (IsServer || IsHost)) SincronizarGameOverClientRpc();
     }
 
     [ClientRpc]
@@ -430,6 +486,7 @@ public class MenuMismaEscena : NetworkBehaviour
 
     private void MostrarGameOverLocal()
     {
+        AjustarVolumenMusica(volumenMenu);
         if (finalScoreText != null && FishingCounterManager.Instance != null)
         {
             int score = FishingCounterManager.Instance.GetFishCount();
@@ -453,7 +510,7 @@ public class MenuMismaEscena : NetworkBehaviour
         if (activeButtons.Length > 0 && activeButtons[0] != null)
         {
             activeButtons[0].Select();
-            if (IsServer || IsHost)
+            if (IsSpawned && (IsServer || IsHost))
             {
                 SincronizarSeleccionBotonClientRpc(0);
             }
@@ -463,7 +520,7 @@ public class MenuMismaEscena : NetworkBehaviour
     public void ReiniciarJuego()
     {
         ReiniciarJuegoLocal();
-        if (IsServer || IsHost) ReiniciarJuegoClientRpc();
+        if (IsSpawned && (IsServer || IsHost)) ReiniciarJuegoClientRpc();
     }
 
     [ClientRpc]
@@ -489,7 +546,7 @@ public class MenuMismaEscena : NetworkBehaviour
     public void VolverAlMenuPrincipal()
     {
         VolverAlMenuPrincipalLocal();
-        if (IsServer || IsHost) VolverAlMenuPrincipalClientRpc();
+        if (IsSpawned && (IsServer || IsHost)) VolverAlMenuPrincipalClientRpc();
     }
 
     [ClientRpc]
@@ -616,5 +673,81 @@ public class MenuMismaEscena : NetworkBehaviour
         if (boteObjeto == null) return;
         foreach (var r in boteObjeto.GetComponentsInChildren<Renderer>(true))
             r.enabled = visible;
+    }
+
+    private ThirdPController ObtenerJugadorLocalReal()
+    {
+        // 1. Si estamos en red, obtenemos el personaje asignado a NUESTRO cliente
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening)
+        {
+            if (NetworkManager.Singleton.LocalClient != null && NetworkManager.Singleton.LocalClient.PlayerObject != null)
+            {
+                var pc = NetworkManager.Singleton.LocalClient.PlayerObject.GetComponent<ThirdPController>();
+                if (pc != null) return pc;
+            }
+        }
+
+        // 2. Si no hay red o es singleplayer, buscamos el jugador local activo en la escena
+        ThirdPController[] jugadores = FindObjectsOfType<ThirdPController>();
+        foreach (var j in jugadores)
+        {
+            if (j != null && j.gameObject.activeInHierarchy && (j.IsOwner || !j.IsSpawned))
+                return j;
+        }
+
+        return playerController;
+    }
+
+    private void ActualizarTextoEstadoHUD()
+    {
+        if (txtEstadoJugador == null || canvasGameHUD == null || !canvasGameHUD.activeInHierarchy) return;
+
+        // 1. Detección directa del Bote (evalúa primero, sin depender del Inspector ni del jugador activo)
+        BoatDriverToggle boatToggle = FindObjectOfType<BoatDriverToggle>();
+        if (boatToggle != null && boatToggle.IsDriving)
+        {
+            txtEstadoJugador.text = "En el bote";
+            return;
+        }
+
+        // 2. Si no está en el bote, busca al personaje para revisar estados de pesca / caminata
+        ThirdPController jugadorActual = ObtenerJugadorLocalReal();
+        if (jugadorActual == null) return;
+
+        if (jugadorActual.isFishing)
+        {
+            if (jugadorActual.alreadyCast)
+                txtEstadoJugador.text = "Pescando";
+            else if (jugadorActual.isReeling)
+                txtEstadoJugador.text = "Recogiendo...";
+            else
+                txtEstadoJugador.text = "Preparado";
+        }
+        else
+        {
+            txtEstadoJugador.text = "Caminando";
+        }
+    }
+
+    private void AjustarVolumenMusica(float objetivo)
+    {
+        if (bgmSource == null) return;
+        if (rutinaVolumen != null) StopCoroutine(rutinaVolumen);
+        rutinaVolumen = StartCoroutine(TransicionVolumenCorrutina(objetivo));
+    }
+
+    private System.Collections.IEnumerator TransicionVolumenCorrutina(float objetivo)
+    {
+        float inicio = bgmSource.volume;
+        float tiempo = 0f;
+        float duracion = 0.8f; // Transición suave en 0.8 segundos
+
+        while (tiempo < duracion)
+        {
+            tiempo += Time.unscaledDeltaTime;
+            bgmSource.volume = Mathf.Lerp(inicio, objetivo, tiempo / duracion);
+            yield return null;
+        }
+        bgmSource.volume = objetivo;
     }
 }
