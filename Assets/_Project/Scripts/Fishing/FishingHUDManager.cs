@@ -3,7 +3,14 @@ using TMPro;
 using System.Collections;
 using Unity.Netcode;
 
-public class FishingHUDManager : NetworkBehaviour
+/// <summary>
+/// HUD de pesca (potencia, gestos, ventana de tiro).
+/// - La PC (servidor) es la unica que decide que se muestra: muestra local y reenvia al celular
+///   a traves de MenuMismaEscena (que ya tiene un NetworkObject spawneado y RPCs funcionando).
+/// - El celular (visor) ignora las llamadas directas y solo muestra lo que le llega por el relay.
+/// - Los metodos publicos conservan el mismo nombre/firma, asi que ThirdPController no cambia.
+/// </summary>
+public class FishingHUDManager : MonoBehaviour
 {
     public static FishingHUDManager Instance;
 
@@ -16,23 +23,37 @@ public class FishingHUDManager : NetworkBehaviour
     [SerializeField] private GameObject gesturePanel;
     [SerializeField] private TextMeshProUGUI gestureText;
 
-    private Coroutine powerCoroutine;
-
     [Header("Panel Ventana de Tiro")]
     [SerializeField] private GameObject castWindowPanel;
     [SerializeField] private TextMeshProUGUI castWindowText;
 
-    /*
-    void Start()
-    {
-        Canvas canvas = GetComponent<Canvas>();
-        if (canvas != null && canvas.worldCamera == null)
-        {
-            canvas.worldCamera = Camera.main;
-        }
-    }
-    */
-    void Awake()
+    private Coroutine powerCoroutine;
+
+    // Relay hacia el celular
+    private MenuMismaEscena relay;
+    private string ultimoGestoEnviado = null;
+    private bool gestoVisibleEnviado = false;
+    private float ultimaVentanaEnviada = -1f;
+    private bool ventanaVisibleEnviada = false;
+
+    // Camara
+    private float proximoChequeoCamara = 0f;
+    private float proximoReintentoCamara = 0f;
+
+    // true si ya se le mostro algo al celular (evita mandar un OcultarTodo por RPC en cada frame)
+    private bool hudVisorPendiente = false;
+
+    private bool EsVisor =>
+        NetworkManager.Singleton != null &&
+        NetworkManager.Singleton.IsListening &&
+        !NetworkManager.Singleton.IsServer;
+
+    private bool EsServidorEnRed =>
+        NetworkManager.Singleton != null &&
+        NetworkManager.Singleton.IsListening &&
+        NetworkManager.Singleton.IsServer;
+
+    private void Awake()
     {
         if (Instance == null)
         {
@@ -46,47 +67,142 @@ public class FishingHUDManager : NetworkBehaviour
         HideAllLocal();
     }
 
+    private void Start()
+    {
+        EnsureCamera();
+    }
+
+    private void OnEnable()
+    {
+        EnsureCamera();
+    }
+
+    // Si la camara enlazada al canvas se apaga o desaparece (muy comun en el celular), se vuelve a buscar sola
+    private void LateUpdate()
+    {
+        if (Time.unscaledTime < proximoChequeoCamara) return;
+        proximoChequeoCamara = Time.unscaledTime + 0.5f;
+
+        Canvas canvas = GetComponent<Canvas>();
+        if (canvas == null || canvas.renderMode == RenderMode.ScreenSpaceOverlay) return;
+
+        if (canvas.worldCamera == null || !canvas.worldCamera.isActiveAndEnabled)
+        {
+            EnsureCamera();
+        }
+    }
+
+    // ---------------- CAMARA ----------------
     public void EnsureCamera()
     {
         Canvas canvas = GetComponent<Canvas>();
-        if (canvas != null)
+        if (canvas == null) return;
+
+        if (canvas.renderMode == RenderMode.ScreenSpaceOverlay) return;
+
+        Camera targetCam = BuscarCamaraLocal();
+        if (targetCam == null) return;
+
+        if (canvas.worldCamera != targetCam)
         {
-            if (canvas.worldCamera == null || canvas.worldCamera != Camera.main)
+            canvas.worldCamera = targetCam;
+        }
+
+        if (canvas.renderMode == RenderMode.ScreenSpaceCamera)
+        {
+            canvas.planeDistance = 0.5f; // HUD a 0.5m de la vista en 1ra persona
+        }
+    }
+
+    // Version barata para llamar en cada Show*: solo busca de nuevo si la camara actual no sirve
+    private void AsegurarCamaraLigero()
+    {
+        Canvas canvas = GetComponent<Canvas>();
+        if (canvas == null || canvas.renderMode == RenderMode.ScreenSpaceOverlay) return;
+
+        if (canvas.worldCamera == null || !canvas.worldCamera.isActiveAndEnabled)
+        {
+            // Con limite de frecuencia: si no hay camara valida, no buscar en cada frame
+            if (Time.unscaledTime < proximoReintentoCamara) return;
+            proximoReintentoCamara = Time.unscaledTime + 0.5f;
+            EnsureCamera();
+        }
+    }
+
+    private Camera BuscarCamaraLocal()
+    {
+        ThirdPController player = null;
+
+        // 1. El jugador de ESTE dispositivo (en el celular no es el de la PC)
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening &&
+            NetworkManager.Singleton.LocalClient != null &&
+            NetworkManager.Singleton.LocalClient.PlayerObject != null)
+        {
+            player = NetworkManager.Singleton.LocalClient.PlayerObject.GetComponent<ThirdPController>();
+        }
+
+        // 2. Algun ThirdPController propio (o sin red)
+        if (player == null)
+        {
+            ThirdPController[] jugadores = FindObjectsOfType<ThirdPController>();
+            foreach (var j in jugadores)
             {
-                canvas.worldCamera = Camera.main;
+                if (j != null && j.gameObject.activeInHierarchy && (j.IsOwner || !j.IsSpawned))
+                {
+                    player = j;
+                    break;
+                }
             }
         }
-        /*
-        Canvas canvas = GetComponent<Canvas>();
-        if (canvas != null && canvas.worldCamera == null)
-        {
-            canvas.worldCamera = Camera.main;
-        }
-        */
+
+        Camera cam = CamaraDe(player);
+        if (cam != null && cam.isActiveAndEnabled) return cam;
+
+        // 3. Respaldo: camara principal activa
+        if (Camera.main != null && Camera.main.isActiveAndEnabled) return Camera.main;
+
+        // 4. Ultimo recurso: la del jugador aunque este apagada (LateUpdate la corrige cuando se active)
+        return cam != null ? cam : Camera.main;
     }
 
-    // --- POTENCIA DE LANZAMIENTO ---
+    private Camera CamaraDe(ThirdPController p)
+    {
+        if (p == null || p.camera == null) return null;
+
+        Camera c = p.camera.GetComponent<Camera>();
+        if (c == null) c = p.camera.GetComponentInChildren<Camera>(true);
+        return c;
+    }
+
+    // ---------------- RELAY AL CELULAR ----------------
+    private void Relay(MenuMismaEscena.HudPescaAccion accion, float valor = 0f, string texto = "", int a = 0, int b = 0)
+    {
+        if (!EsServidorEnRed) return;
+
+        if (relay == null) relay = FindObjectOfType<MenuMismaEscena>();
+        if (relay == null) return;
+
+        if (accion == MenuMismaEscena.HudPescaAccion.Potencia ||
+            accion == MenuMismaEscena.HudPescaAccion.Gesto ||
+            accion == MenuMismaEscena.HudPescaAccion.VentanaTiro)
+        {
+            hudVisorPendiente = true;
+        }
+
+        relay.EnviarHUDPescaAlVisor(accion, valor, texto, a, b);
+    }
+
+    // ---------------- POTENCIA DE LANZAMIENTO ----------------
     public void ShowCastPower(float force)
     {
-        if (IsServer || IsHost)
-        {
-            ShowCastPowerClientRpc(force);
-        }
-        else
-        {
-            ShowCastPowerLocal(force);
-        }
-    }
-
-    [ClientRpc]
-    private void ShowCastPowerClientRpc(float force)
-    {
+        if (EsVisor) return; // el celular solo recibe por el relay
         ShowCastPowerLocal(force);
+        Relay(MenuMismaEscena.HudPescaAccion.Potencia, force);
     }
 
-    private void ShowCastPowerLocal(float force)
+    public void ShowCastPowerLocal(float force)
     {
-        EnsureCamera();
+        AsegurarCamaraLigero();
         if (powerPanel == null || powerText == null) return;
 
         if (powerCoroutine != null) StopCoroutine(powerCoroutine);
@@ -103,28 +219,30 @@ public class FishingHUDManager : NetworkBehaviour
         if (powerPanel != null) powerPanel.SetActive(false);
     }
 
-    // --- GESTOS REQUERIDOS ---
+    // ---------------- GESTOS REQUERIDOS ----------------
     public void ShowGesturePrompt(string gestureName, int hits, int attempts)
     {
-        if (IsServer || IsHost)
-        {
-            ShowGesturePromptClientRpc(gestureName, hits, attempts);
-        }
-        else
-        {
-            ShowGesturePromptLocal(gestureName, hits, attempts);
-        }
-    }
-
-    [ClientRpc]
-    private void ShowGesturePromptClientRpc(string gestureName, int hits, int attempts)
-    {
+        if (EsVisor) return;
         ShowGesturePromptLocal(gestureName, hits, attempts);
+
+        if (string.IsNullOrEmpty(gestureName) || gestureName == "None")
+        {
+            EnviarOcultarGesto();
+            return;
+        }
+
+        // Solo se envia si cambio algo (evita un RPC por frame)
+        string clave = gestureName + "|" + hits + "|" + attempts;
+        if (clave == ultimoGestoEnviado && gestoVisibleEnviado) return;
+
+        ultimoGestoEnviado = clave;
+        gestoVisibleEnviado = true;
+        Relay(MenuMismaEscena.HudPescaAccion.Gesto, 0f, gestureName, hits, attempts);
     }
 
-    private void ShowGesturePromptLocal(string gestureName, int hits, int attempts)
+    public void ShowGesturePromptLocal(string gestureName, int hits, int attempts)
     {
-        EnsureCamera();
+        AsegurarCamaraLigero();
         if (gesturePanel == null || gestureText == null) return;
 
         if (string.IsNullOrEmpty(gestureName) || gestureName == "None")
@@ -139,49 +257,42 @@ public class FishingHUDManager : NetworkBehaviour
 
     public void HideGesturePrompt()
     {
-        if (IsServer || IsHost)
-        {
-            HideGesturePromptClientRpc();
-        }
-        else
-        {
-            HideGesturePromptLocal();
-        }
-    }
-
-    [ClientRpc]
-    private void HideGesturePromptClientRpc()
-    {
+        if (EsVisor) return;
         HideGesturePromptLocal();
+        EnviarOcultarGesto();
     }
 
-    private void HideGesturePromptLocal()
+    public void HideGesturePromptLocal()
     {
         if (gesturePanel != null) gesturePanel.SetActive(false);
     }
 
-    // --- VENTANA DE TIRO ---
+    private void EnviarOcultarGesto()
+    {
+        if (!gestoVisibleEnviado) return;
+        gestoVisibleEnviado = false;
+        ultimoGestoEnviado = null;
+        Relay(MenuMismaEscena.HudPescaAccion.OcultarGesto);
+    }
+
+    // ---------------- VENTANA DE TIRO ----------------
     public void ShowCastWindowTimer(float timeLeft)
     {
-        if (IsServer || IsHost)
-        {
-            ShowCastWindowTimerClientRpc(timeLeft);
-        }
-        else
-        {
-            ShowCastWindowTimerLocal(timeLeft);
-        }
-    }
-
-    [ClientRpc]
-    private void ShowCastWindowTimerClientRpc(float timeLeft)
-    {
+        if (EsVisor) return;
         ShowCastWindowTimerLocal(timeLeft);
+
+        // Solo se envia cuando cambia el decimal que se ve en pantalla
+        float redondeado = Mathf.Round(timeLeft * 10f) / 10f;
+        if (ventanaVisibleEnviada && Mathf.Approximately(redondeado, ultimaVentanaEnviada)) return;
+
+        ultimaVentanaEnviada = redondeado;
+        ventanaVisibleEnviada = true;
+        Relay(MenuMismaEscena.HudPescaAccion.VentanaTiro, redondeado);
     }
 
-    private void ShowCastWindowTimerLocal(float timeLeft)
+    public void ShowCastWindowTimerLocal(float timeLeft)
     {
-        EnsureCamera();
+        AsegurarCamaraLigero();
         if (castWindowPanel == null || castWindowText == null) return;
 
         castWindowText.text = timeLeft.ToString("F1");
@@ -190,23 +301,18 @@ public class FishingHUDManager : NetworkBehaviour
 
     public void HideCastWindowTimer()
     {
-        if (IsServer || IsHost)
-        {
-            HideCastWindowTimerClientRpc();
-        }
-        else
-        {
-            HideCastWindowTimerLocal();
-        }
-    }
-
-    [ClientRpc]
-    private void HideCastWindowTimerClientRpc()
-    {
+        if (EsVisor) return;
         HideCastWindowTimerLocal();
+
+        if (ventanaVisibleEnviada)
+        {
+            ventanaVisibleEnviada = false;
+            ultimaVentanaEnviada = -1f;
+            Relay(MenuMismaEscena.HudPescaAccion.OcultarVentanaTiro);
+        }
     }
 
-    private void HideCastWindowTimerLocal()
+    public void HideCastWindowTimerLocal()
     {
         if (castWindowPanel != null && castWindowPanel.activeSelf)
         {
@@ -214,26 +320,25 @@ public class FishingHUDManager : NetworkBehaviour
         }
     }
 
-    // --- OCULTAR TODO ---
+    // ---------------- OCULTAR TODO ----------------
     public void HideAll()
     {
-        if (IsServer || IsHost)
-        {
-            HideAllClientRpc();
-        }
-        else
-        {
-            HideAllLocal();
-        }
-    }
-
-    [ClientRpc]
-    private void HideAllClientRpc()
-    {
+        if (EsVisor) return;
         HideAllLocal();
+
+        gestoVisibleEnviado = false;
+        ultimoGestoEnviado = null;
+        ventanaVisibleEnviada = false;
+        ultimaVentanaEnviada = -1f;
+
+        if (hudVisorPendiente)
+        {
+            hudVisorPendiente = false;
+            Relay(MenuMismaEscena.HudPescaAccion.OcultarTodo);
+        }
     }
 
-    private void HideAllLocal()
+    public void HideAllLocal()
     {
         if (powerPanel != null) powerPanel.SetActive(false);
         if (gesturePanel != null) gesturePanel.SetActive(false);

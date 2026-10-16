@@ -35,10 +35,10 @@ public class BoatController : NetworkBehaviour
         if (debugLogs) Debug.Log("[BOTE] BoatController.SetDrivingState(" + driving + ")");
     }
 
-
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
+        isBeingDriven = false;
         if (IsServer)
         {
             netBoatPos.Value = transform.position;
@@ -51,13 +51,10 @@ public class BoatController : NetworkBehaviour
         }
     }
 
-        private void Update()
+    private void Update()
     {
         var nm = NetworkManager.Singleton;
         bool offline = nm == null || !nm.IsListening;
- 
-        // Usamos el NetworkManager (no this.IsServer) para que, aunque el objeto
-        // no este spawneado todavia, el host nunca caiga en la rama de "cliente".
         bool hasAuthority = offline || nm.IsServer;
 
         if (!hasAuthority && debugLogs && Time.frameCount % 120 == 0)
@@ -78,7 +75,6 @@ public class BoatController : NetworkBehaviour
         }
         else if (IsSpawned)
         {
-            // Cliente: solo visualizacion
             float t = Time.deltaTime * syncSmoothing;
             transform.position = Vector3.Lerp(transform.position, netBoatPos.Value, t);
             transform.rotation = Quaternion.Slerp(transform.rotation, netBoatRot.Value, t);
@@ -119,6 +115,7 @@ public class BoatController : NetworkBehaviour
             transform.Rotate(Vector3.up, input.x * turnSpeed * Time.deltaTime);
         }
     }
+
     public void SnapTo(Vector3 pos, Quaternion rot)
     {
         transform.SetPositionAndRotation(pos, rot);

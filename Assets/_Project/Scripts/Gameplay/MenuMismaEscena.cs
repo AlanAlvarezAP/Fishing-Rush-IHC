@@ -11,6 +11,17 @@ using WiimoteApi;
 
 public class MenuMismaEscena : NetworkBehaviour
 {
+    // Acciones del HUD de pesca que la PC le reenvia al celular (ver FishingHUDManager)
+    public enum HudPescaAccion
+    {
+        Potencia = 0,
+        Gesto = 1,
+        OcultarGesto = 2,
+        VentanaTiro = 3,
+        OcultarVentanaTiro = 4,
+        OcultarTodo = 5
+    }
+
     [Header("UI Canvases Principales")]
     public GameObject canvasMenu;
     public GameObject canvasGameHUD;
@@ -282,7 +293,12 @@ public class MenuMismaEscena : NetworkBehaviour
         if (panelWiimote != null) panelWiimote.SetActive(false);
         if (panelTutorial != null) panelTutorial.SetActive(false);
 
-        if (boteObjeto != null) SetBoteVisible(true);
+        if (boteObjeto != null)
+        {
+            SetBoteVisible(true);
+            var toggle = boteObjeto.GetComponent<BoatDriverToggle>();
+            if (toggle != null) toggle.ActivarModoConduccionPermanente();
+        }
 
         if (canvasGameHUD != null)
         {
@@ -580,8 +596,13 @@ public class MenuMismaEscena : NetworkBehaviour
 
     private void ApagarJugador()
     {
+        if (boteObjeto != null)
+        {
+            SetBoteVisible(false);
+            var toggle = boteObjeto.GetComponent<BoatDriverToggle>();
+            if (toggle != null) toggle.DesactivarConduccionMenu();
+        }
         ResetearPosicionesOriginales();
-        if (boteObjeto != null) SetBoteVisible(false);
         if (rodObjeto != null) rodObjeto.SetActive(false);
         GarantizarJugador();
         ThirdPController[] players = FindObjectsOfType<ThirdPController>();
@@ -600,12 +621,15 @@ public class MenuMismaEscena : NetworkBehaviour
             boteRotInicial = boteObjeto.transform.rotation;
         }
 
-        GarantizarJugador();
-        if (playerController != null)
-        {
-            jugadorPosInicial = playerController.transform.position;
-            jugadorRotInicial = playerController.transform.rotation;
-        }
+        jugadorPosInicial = new Vector3(0f, 1.0f, 0f);
+        jugadorRotInicial = Quaternion.identity;
+
+        //GarantizarJugador();
+        //if (playerController != null)
+        //{
+        //    jugadorPosInicial = playerController.transform.position;
+        //    jugadorRotInicial = playerController.transform.rotation;
+        //}
 
         posicionesGuardadas = true;
     }
@@ -640,10 +664,13 @@ public class MenuMismaEscena : NetworkBehaviour
             CharacterController cc = playerController.GetComponent<CharacterController>();
             if (cc != null) cc.enabled = false;
 
-            playerController.transform.position = jugadorPosInicial;
-            playerController.transform.rotation = jugadorRotInicial;
+            //playerController.transform.position = jugadorPosInicial;
+            //playerController.transform.rotation = jugadorRotInicial;
+            //if (cc != null) cc.enabled = true;
+            playerController.transform.SetPositionAndRotation(jugadorPosInicial, jugadorRotInicial);
+            Physics.SyncTransforms();
 
-            if (cc != null) cc.enabled = true;
+            playerController.enabled = false;
         }
     }
     private void ResaltarBotonLocal(int index)
@@ -668,6 +695,169 @@ public class MenuMismaEscena : NetworkBehaviour
         }
     }
     
+    // =====================================================================
+    // HUD DE PESCA: relay PC (servidor) -> celular (visor)
+    // FishingHUDManager es un MonoBehaviour normal y no viaja por red. Sus eventos se
+    // reenvian por este NetworkBehaviour, cuyos RPCs ya funcionan en el celular.
+    // =====================================================================
+    public void EnviarHUDPescaAlVisor(HudPescaAccion accion, float valor, string texto, int a, int b)
+    {
+        if (!IsSpawned || !IsServer) return;
+        HudPescaClientRpc((int)accion, valor, texto ?? "", a, b);
+    }
+
+    [ClientRpc]
+    private void HudPescaClientRpc(int accion, float valor, string texto, int a, int b)
+    {
+        if (IsServer) return; // la PC ya lo mostro localmente
+        AplicarHUDPescaVisor((HudPescaAccion)accion, valor, texto, a, b);
+    }
+
+    private void AplicarHUDPescaVisor(HudPescaAccion accion, float valor, string texto, int a, int b)
+    {
+        try
+        {
+            bool esMostrar = accion == HudPescaAccion.Potencia
+                          || accion == HudPescaAccion.Gesto
+                          || accion == HudPescaAccion.VentanaTiro;
+
+            // Si el HUD de juego estaba apagado en el celular, se enciende antes de mostrar algo
+            if (esMostrar) AsegurarHUDActivoVisor();
+
+            FishingHUDManager hud = FishingHUDManager.Instance;
+            if (hud == null) hud = FindObjectOfType<FishingHUDManager>(true);
+            if (hud == null) return;
+
+            if (esMostrar && !hud.gameObject.activeInHierarchy) hud.gameObject.SetActive(true);
+
+            switch (accion)
+            {
+                case HudPescaAccion.Potencia:
+                    hud.ShowCastPowerLocal(valor);
+                    break;
+                case HudPescaAccion.Gesto:
+                    hud.ShowGesturePromptLocal(texto, a, b);
+                    break;
+                case HudPescaAccion.OcultarGesto:
+                    hud.HideGesturePromptLocal();
+                    break;
+                case HudPescaAccion.VentanaTiro:
+                    hud.ShowCastWindowTimerLocal(valor);
+                    break;
+                case HudPescaAccion.OcultarVentanaTiro:
+                    hud.HideCastWindowTimerLocal();
+                    break;
+                case HudPescaAccion.OcultarTodo:
+                    hud.HideAllLocal();
+                    break;
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[HUD PESCA][VISOR] Error aplicando accion " + accion + ": " + e.Message);
+        }
+    }
+
+    private void AsegurarHUDActivoVisor()
+    {
+        if (canvasGameHUD == null) return;
+
+        if (!canvasGameHUD.activeSelf) canvasGameHUD.SetActive(true);
+
+        CanvasGroup cg = canvasGameHUD.GetComponent<CanvasGroup>();
+        if (cg != null)
+        {
+            cg.alpha = 1f;
+            cg.interactable = true;
+            cg.blocksRaycasts = true;
+        }
+    }
+
+    // =====================================================================
+    // ESCENA DEL TUTORIAL (PC + celular)
+    // La PC (servidor) decide si el tutorial esta mostrando un SLIDE o una PRUEBA y lo manda
+    // al celular por este NetworkBehaviour (mismo camino de RPC que usa EmpezarJuego).
+    //
+    // En PRUEBA se deja la escena EXACTAMENTE como EmpezarJuego: bote visible y en conduccion,
+    // y el MISMO ThirdPController (playerController) habilitado en la PC y en el celular.
+    // Esto es lo importante: el LateUpdate del ThirdPController tambien debe correr en el celular
+    // para que (1) envie la rotacion en Y a la PC y (2) el anzuelo siga a netHookPos.
+    // Antes el tutorial habilitaba otro objeto (ObtenerJugadorLocalReal) y ademas forzaba
+    // cc.enabled = true, cosa que EmpezarJuego nunca hace.
+    // =====================================================================
+    public void SetModoEscenaTutorial(bool enPrueba)
+    {
+        AplicarModoEscenaTutorialLocal(enPrueba);
+        if (IsSpawned && IsServer) SetModoEscenaTutorialClientRpc(enPrueba);
+    }
+
+    [ClientRpc]
+    private void SetModoEscenaTutorialClientRpc(bool enPrueba)
+    {
+        if (!IsServer) AplicarModoEscenaTutorialLocal(enPrueba);
+    }
+
+    private void AplicarModoEscenaTutorialLocal(bool enPrueba)
+    {
+        // HUD primero (no depende de nada mas y no puede fallar por el bote o el jugador)
+        AplicarHUDTutorialLocal(enPrueba);
+
+        try
+        {
+            // Igual que OcultarMenuYEmpezarLocal: parte siempre de la escena reseteada
+            // (detiene la conduccion, reposiciona bote y jugador y apaga el ThirdPController)
+            ResetearPosicionesOriginales();
+
+            if (enPrueba)
+            {
+                if (boteObjeto != null)
+                {
+                    SetBoteVisible(true);
+                    var toggle = boteObjeto.GetComponent<BoatDriverToggle>();
+                    if (toggle != null) toggle.ActivarModoConduccionPermanente();
+                }
+
+                // Mismo jugador y mismo enable que EmpezarJuego (sin tocar el CharacterController)
+                GarantizarJugador();
+                if (playerController != null) playerController.enabled = true;
+
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
+            }
+            // En SLIDE el jugador queda apagado, igual que en el menu
+
+            Debug.Log($"[TUTORIAL][ESCENA] enPrueba={enPrueba} server={IsServer} jugador=" +
+                      (playerController != null ? playerController.name + " enabled=" + playerController.enabled : "null"));
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[TUTORIAL][ESCENA] Error aplicando modo escena: " + e.Message);
+        }
+    }
+
+    private void AplicarHUDTutorialLocal(bool enJuego)
+    {
+        if (canvasGameHUD == null) return;
+
+        CanvasGroup cg = canvasGameHUD.GetComponent<CanvasGroup>();
+        if (cg == null) cg = canvasGameHUD.AddComponent<CanvasGroup>();
+
+        if (enJuego)
+        {
+            canvasGameHUD.SetActive(true);
+            cg.alpha = 1f;
+            cg.interactable = true;
+            cg.blocksRaycasts = true;
+
+            if (FishingHUDManager.Instance != null) FishingHUDManager.Instance.EnsureCamera();
+        }
+        else
+        {
+            cg.alpha = 0f;
+            if (FishingHUDManager.Instance != null) FishingHUDManager.Instance.HideAllLocal();
+        }
+    }
+
     private void SetBoteVisible(bool visible)
     {
         if (boteObjeto == null) return;
@@ -702,7 +892,7 @@ public class MenuMismaEscena : NetworkBehaviour
     {
         if (txtEstadoJugador == null || canvasGameHUD == null || !canvasGameHUD.activeInHierarchy) return;
 
-        // 1. Detección directa del Bote (evalúa primero, sin depender del Inspector ni del jugador activo)
+        // 1. Detecciï¿½n directa del Bote (evalï¿½a primero, sin depender del Inspector ni del jugador activo)
         BoatDriverToggle boatToggle = FindObjectOfType<BoatDriverToggle>();
         if (boatToggle != null && boatToggle.IsDriving)
         {
@@ -710,7 +900,7 @@ public class MenuMismaEscena : NetworkBehaviour
             return;
         }
 
-        // 2. Si no está en el bote, busca al personaje para revisar estados de pesca / caminata
+        // 2. Si no estï¿½ en el bote, busca al personaje para revisar estados de pesca / caminata
         ThirdPController jugadorActual = ObtenerJugadorLocalReal();
         if (jugadorActual == null) return;
 
@@ -740,7 +930,7 @@ public class MenuMismaEscena : NetworkBehaviour
     {
         float inicio = bgmSource.volume;
         float tiempo = 0f;
-        float duracion = 0.8f; // Transición suave en 0.8 segundos
+        float duracion = 0.8f; // Transiciï¿½n suave en 0.8 segundos
 
         while (tiempo < duracion)
         {

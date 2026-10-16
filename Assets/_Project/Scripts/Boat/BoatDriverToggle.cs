@@ -25,12 +25,13 @@ public class BoatDriverToggle : NetworkBehaviour
 
     private bool isDriving = false;
     public bool IsDriving => isDriving;
-    private bool wasWiiOne = false;
+    //private bool wasWiiOne = false;
 
     //private NetworkVariable<bool> isDrivingNet = new NetworkVariable<bool>(
     //    false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     //);
 
+    /*
     private static bool HasAuthority
     {
         get
@@ -39,29 +40,22 @@ public class BoatDriverToggle : NetworkBehaviour
             return nm == null || !nm.IsListening || nm.IsServer;
         }
     }
+    */
 
     private void Awake()
     {
         boatController = GetComponentInParent<BoatController>();
         if (boatController == null) boatController = GetComponentInChildren<BoatController>();
- 
-        if (boatController == null)
-            Debug.LogError("[BOTE] No encuentro BoatController: ponlo en el mismo GameObject que este script.");
+        if (boatController == null) boatController = GetComponent<BoatController>();
     }
+
+    //public override void OnNetworkSpawn()
+    //{
+    //    base.OnNetworkSpawn();
+    //    ActivarModoConduccionPermanente();
+    //}
+
     /*
-    public override void OnNetworkSpawn()
-    {
-        base.OnNetworkSpawn();
-        isDrivingNet.OnValueChanged += OnDrivingStateChanged;
-        ApplyDrivingStateLocally(isDrivingNet.Value);
-    }
-
-    public override void OnNetworkDespawn()
-    {
-        base.OnNetworkDespawn();
-        isDrivingNet.OnValueChanged -= OnDrivingStateChanged;
-    }
-
     private void OnDrivingStateChanged(bool previousValue, bool newValue)
     {
         if (isDriving != newValue)
@@ -69,17 +63,17 @@ public class BoatDriverToggle : NetworkBehaviour
             ApplyDrivingStateLocally(newValue);
         }
     }
-
-    private void Start()
-    {
-        TryFindPlayer();
-    }
     */
+
+    //private void Start()
+    //{
+    //    ActivarModoConduccionPermanente();
+    //}
+
     private bool TryFindPlayer()
     {
         if (playerObject == null)
         {
-            // En el host, el jugador local ES el jugador del host
             var nm = NetworkManager.Singleton;
             if (nm != null && nm.IsListening && nm.LocalClient != null && nm.LocalClient.PlayerObject != null)
                 playerObject = nm.LocalClient.PlayerObject.gameObject;
@@ -98,8 +92,14 @@ public class BoatDriverToggle : NetworkBehaviour
         return true;
     }
 
-        private void Update()
+    private void Update()
     {
+        //if (playerObject == null)
+        //{
+        //    ActivarModoConduccionPermanente();
+        //}
+
+        /*
         if (!HasAuthority) return; // los clientes solo visualizan
  
         bool wiiToggleTrigger = false;
@@ -123,16 +123,19 @@ public class BoatDriverToggle : NetworkBehaviour
             if (!TryFindPlayer()) return;
             SetDriving(!isDriving);
         }
+        */
     }
  
     private void LateUpdate()
     {
         if (isDriving && playerObject != null && timonAnchor != null)
         {
-            playerObject.transform.SetPositionAndRotation(timonAnchor.position, timonAnchor.rotation);
+            playerObject.transform.position = timonAnchor.position;
+            //playerObject.transform.SetPositionAndRotation(timonAnchor.position, timonAnchor.rotation);
         }
     }
  
+    /*
     private void SetDriving(bool driving)
     {
         isDriving = driving;
@@ -172,8 +175,43 @@ public class BoatDriverToggle : NetworkBehaviour
             Debug.Log("[BOTE] Modo Conduccion Desactivado");
         }
     }
+    */
+
     public void ForceStopDriving()
     {
-        if (isDriving && playerObject != null) SetDriving(false);
+        DesactivarConduccionMenu();
+        //if (isDriving && playerObject != null) SetDriving(false);
+        //if (playerObject != null && timonAnchor != null)
+        //{
+        //    playerObject.transform.SetPositionAndRotation(timonAnchor.position, timonAnchor.rotation);
+        //}
+    }
+
+    public void ActivarModoConduccionPermanente()
+    {
+        if (!TryFindPlayer()) return;
+
+        isDriving = true;
+
+        if (characterController != null) characterController.enabled = false;
+
+        if (playerController != null) playerController.enabled = true;
+
+        foreach (var col in playerObject.GetComponentsInChildren<Collider>())
+            col.enabled = false;
+
+        if (timonAnchor != null)
+            playerObject.transform.SetPositionAndRotation(timonAnchor.position, timonAnchor.rotation);
+
+        if (boatController != null) boatController.SetDrivingState(true);
+
+        Debug.Log("[BOTE] Modo Conduccion Permanente Activado.");
+    }
+
+    public void DesactivarConduccionMenu()
+    {
+        isDriving = false;
+        if (boatController != null) boatController.SetDrivingState(false);
+        Debug.Log("[BOTE] Modo Conduccion DESACTIVADO por Menu.");
     }
 }
