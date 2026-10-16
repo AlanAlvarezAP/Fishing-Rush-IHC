@@ -69,6 +69,14 @@ public class ThirdPController : NetworkBehaviour
         Quaternion.identity, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner
     );
 
+    //private NetworkVariable<Quaternion> netCameraRot = new NetworkVariable<Quaternion>(
+    //    Quaternion.identity, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner
+    //);
+
+    private NetworkVariable<float> netPlayerYaw = new NetworkVariable<float>(
+        0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner
+    );
+
     [Header("Referencias de Pesca")]
     public GameObject fishingRod;
     [SerializeField] private GameObject lineObject;
@@ -128,13 +136,17 @@ public class ThirdPController : NetworkBehaviour
     private float debugCalculatedForce = 12f;
     #pragma warning disable CS0414
     private string debugState = "Iniciando...";
-#pragma warning restore CS0414
+    #pragma warning restore CS0414
 
     [Header("Efectos de Sonido (SFX)")]
     public AudioSource sfxSource;
     public AudioClip sfxLanzamiento;
     public AudioClip sfxAciertoPatron;
     public AudioClip sfxFalloPatron;
+
+    private float lastSentYaw = -999f;
+    private float sendTimer = 0f;
+    private bool hasRemoteYaw = false;
 
     public bool CanFishBite()
     {
@@ -486,6 +498,7 @@ public class ThirdPController : NetworkBehaviour
         }
 
         // --- MOVIMIENTO ---
+        /*
         if (!isFishing)
         {
             float horizontal = Input.GetAxisRaw("Horizontal");
@@ -496,22 +509,6 @@ public class ThirdPController : NetworkBehaviour
 
             Vector3 inputDir = new Vector3(horizontal, 0f, vertical).normalized;
             targetVelY = Mathf.Clamp01(inputDir.magnitude);
-
-            /*
-            targetVelY = Mathf.Clamp01(new Vector2(horizontal, vertical).magnitude);
-
-            Transform camTransform = camera != null ? camera : (Camera.main != null ? Camera.main.transform : transform);
-
-            Vector3 camForward = camTransform.forward;
-            camForward.y = 0f;
-            camForward.Normalize();
-
-            Vector3 camRight = camTransform.right;
-            camRight.y = 0f;
-            camRight.Normalize();
-
-            Vector3 moveDirection = (camForward * vertical + camRight * horizontal).normalized;
-            */
 
             //Vector3 direction = new Vector3(horizontal, 0, vertical).normalized;
             if (inputDir.magnitude >= 0.1f)
@@ -542,10 +539,15 @@ public class ThirdPController : NetworkBehaviour
                     }
                     currentSpeed = speed;
                 }
-                controller.Move(moveDirection * currentSpeed * Time.deltaTime);
+                if (controller != null && controller.enabled)
+                {
+                    controller.Move(moveDirection * currentSpeed * Time.deltaTime);
+                }
             }
         }
+        */
 
+        /*
         if (controller.isGrounded)
         {
             if (bhopEnabled)
@@ -557,21 +559,40 @@ public class ThirdPController : NetworkBehaviour
                 if (Input.GetButtonDown("Jump") || wiiJumpDown) Jump();
             }
         }
+        */
+
+        targetVelY = 0f;
 
         currentVelY = Mathf.Lerp(currentVelY, targetVelY, speedChangeRate);
-        animator.SetFloat("velY", currentVelY);
-
-        if (controller.isGrounded && playerVelocity.y < 0)
+        if (animator != null)
         {
-            if (animator != null) animator.SetBool("isGrounded", true);
-            playerVelocity.y = -2f;
-        }
-        else
-        {
-            playerVelocity.y += gravityFactor * gravity * Time.deltaTime;
+            animator.SetFloat("velY", currentVelY);
         }
 
-        controller.Move(playerVelocity * Time.deltaTime);
+        if (controller != null && controller.enabled)
+        {
+            if (controller.isGrounded && playerVelocity.y < 0)
+            {
+                if (animator != null) animator.SetBool("isGrounded", true);
+                playerVelocity.y = -2f;
+            }
+            else
+            {
+                playerVelocity.y += gravityFactor * gravity * Time.deltaTime;
+            }
+
+            controller.Move(playerVelocity * Time.deltaTime);
+        }
+
+        //if (controller.isGrounded && playerVelocity.y < 0)
+        //{
+        //    if (animator != null) animator.SetBool("isGrounded", true);
+        //    playerVelocity.y = -2f;
+        //}
+        //else
+        //{
+        //    playerVelocity.y += gravityFactor * gravity * Time.deltaTime;
+        //}
     }
 
     private IEnumerator ExecuteCastWithDelay(float force)
@@ -597,7 +618,17 @@ public class ThirdPController : NetworkBehaviour
             {
                 hookRb.velocity = Vector3.zero;
                 hookRb.angularVelocity = Vector3.zero;
-                Vector3 throwDirection = transform.forward * force + Vector3.up * (force * 0.35f);
+
+                Transform camTransform = camera != null ? camera : (Camera.main != null ? Camera.main.transform : transform);
+                //Vector3 throwDirection = camTransform.forward * force + Vector3.up * (force * 0.35f);
+
+                Vector3 aimDir = camTransform.forward;
+                if (hasRemoteYaw)
+                    aimDir = Quaternion.Euler(0f, netPlayerYaw.Value, 0f) * Vector3.forward;
+
+                Vector3 throwDirection = aimDir * force + Vector3.up * (force * 0.35f);
+
+                //Vector3 throwDirection = transform.forward * force + Vector3.up * (force * 0.35f);
                 hookRb.AddForce(throwDirection, ForceMode.Impulse);
                 currentMaxLineLength = Mathf.Clamp(force * 1.1f, 4f, 50f);
             }
@@ -653,6 +684,7 @@ public class ThirdPController : NetworkBehaviour
             {
                 SetHookKinematic(true);
 
+                /*
                 Vector3 targetPos = rodTip.position + (Vector3.down * hangDistance);
                 Vector3 smoothedPos = Vector3.Lerp(hookObject.transform.position, targetPos, Time.fixedDeltaTime * hookFollowSpeed);
 
@@ -665,6 +697,7 @@ public class ThirdPController : NetworkBehaviour
                 {
                     hookObject.transform.position = smoothedPos;
                 }
+                */
 
                 if (verletScript != null)
                 {
@@ -880,19 +913,70 @@ public class ThirdPController : NetworkBehaviour
 
     void LateUpdate()
     {
-        if (!IsSpawned || hookObject == null || !hookObject.activeSelf) return;
+        if (!IsSpawned) return;
 
-        if (IsOwner)
+        Transform rotTarget = (animator != null && animator.transform != transform) ? animator.transform : transform;
+        float targetYaw = 0f;
+        bool haveYaw = false;
+
+        if (!IsServer)
         {
-            netHookPos.Value = hookObject.transform.position;
-            netHookRot.Value = hookObject.transform.rotation;
+            Transform camTransform = camera != null ? camera : (Camera.main != null ? Camera.main.transform : null);
+            if (camTransform != null)
+            {
+                float currentYaw = camTransform.eulerAngles.y;
+                targetYaw = currentYaw;
+                haveYaw = true;
+
+                sendTimer += Time.deltaTime;
+                if (sendTimer >= 0.05f &&
+                    (lastSentYaw < -900f || Mathf.Abs(Mathf.DeltaAngle(lastSentYaw, currentYaw)) > 0.1f))
+                {
+                    lastSentYaw = currentYaw;
+                    sendTimer = 0f;
+                    TransmitirYawServerRpc(currentYaw);
+                }
+            }
         }
-        else
+        else if (hasRemoteYaw)
         {
-            float t = 1f - Mathf.Exp(-20f * Time.deltaTime);
-            Vector3 p = Vector3.Lerp(hookObject.transform.position, netHookPos.Value, t);
-            Quaternion r = Quaternion.Slerp(hookObject.transform.rotation, netHookRot.Value, t);
-            hookObject.transform.SetPositionAndRotation(p, r);
+            targetYaw = netPlayerYaw.Value;
+            haveYaw = true;
+        }
+
+        if (haveYaw)
+        {
+            float t = 1f - Mathf.Exp(-12f * Time.deltaTime);
+            float y = Mathf.LerpAngle(rotTarget.eulerAngles.y, targetYaw, t);
+            rotTarget.rotation = Quaternion.Euler(0f, y, 0f);
+        }
+
+        if (IsOwner && isFishing && (!alreadyCast || isCastingInProcess) && !isReeling
+            && hookObject != null && hookObject.activeSelf && rodTip != null)
+        {
+            Vector3 hangPos = rodTip.position + Vector3.down * hangDistance;
+            hookObject.transform.SetPositionAndRotation(hangPos, rodTip.rotation);
+            if (hookRb != null)
+            {
+                hookRb.position = hangPos;
+                hookRb.rotation = rodTip.rotation;
+            }
+        }
+
+        if (hookObject != null && hookObject.activeSelf)
+        {
+            if (IsOwner)
+            {
+                netHookPos.Value = hookObject.transform.position;
+                netHookRot.Value = hookObject.transform.rotation;
+            }
+            else
+            {
+                float t = 1f - Mathf.Exp(-20f * Time.deltaTime);
+                Vector3 p = Vector3.Lerp(hookObject.transform.position, netHookPos.Value, t);
+                Quaternion r = Quaternion.Slerp(hookObject.transform.rotation, netHookRot.Value, t);
+                hookObject.transform.SetPositionAndRotation(p, r);
+            }
         }
     }
 
@@ -943,5 +1027,12 @@ public class ThirdPController : NetworkBehaviour
         {
             sfxSource.PlayOneShot(sfxFalloPatron, 1.0f);
         }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void TransmitirYawServerRpc(float yaw)
+    {
+        netPlayerYaw.Value = yaw;
+        hasRemoteYaw = true;
     }
 }

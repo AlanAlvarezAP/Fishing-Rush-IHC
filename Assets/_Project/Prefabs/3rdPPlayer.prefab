@@ -1056,9 +1056,9 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4007870944022636038}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.4182012, y: -0.5381906, z: -0.37267455, w: 0.62973994}
-  m_LocalPosition: {x: 0.766, y: 0.422, z: -0.065}
-  m_LocalScale: {x: 0.05, y: 1, z: 0.05}
+  m_LocalRotation: {x: -0.41820118, y: -0.53819066, z: -0.37267464, w: 0.6297399}
+  m_LocalPosition: {x: 0.7659999, y: 0.42199996, z: -0.06499998}
+  m_LocalScale: {x: 0.05000001, y: 1, z: 0.049999997}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 2677710284258064706}
@@ -1870,7 +1870,6 @@ MonoBehaviour:
   isReeling: 0
   isCastingInProcess: 0
   isHookOccupied: 0
-  currentRequestedGesture: 0
   fishingRod: {fileID: 4007870944022636038}
   lineObject: {fileID: 0}
   hookObject: {fileID: 0}
@@ -1890,6 +1889,10 @@ MonoBehaviour:
   umbralAlto: 1.8
   fuerzaBaja: 12
   fuerzaAlta: 35
+  sfxSource: {fileID: 0}
+  sfxLanzamiento: {fileID: 0}
+  sfxAciertoPatron: {fileID: 0}
+  sfxFalloPatron: {fileID: 0}
 --- !u!54 &2557545417108597661
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -2223,7 +2226,7 @@ PrefabInstance:
     m_AddedGameObjects:
     - targetCorrespondingSourceObject: {fileID: 400018, guid: 11d723d356152494ea1f1dc10ed906ef,
         type: 3}
-      insertIndex: 0
+      insertIndex: -1
       addedObject: {fileID: 4379694996128282208}
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 11d723d356152494ea1f1dc10ed906ef, type: 3}
