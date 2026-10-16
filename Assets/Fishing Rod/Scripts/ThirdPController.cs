@@ -128,7 +128,13 @@ public class ThirdPController : NetworkBehaviour
     private float debugCalculatedForce = 12f;
     #pragma warning disable CS0414
     private string debugState = "Iniciando...";
-    #pragma warning restore CS0414
+#pragma warning restore CS0414
+
+    [Header("Efectos de Sonido (SFX)")]
+    public AudioSource sfxSource;
+    public AudioClip sfxLanzamiento;
+    public AudioClip sfxAciertoPatron;
+    public AudioClip sfxFalloPatron;
 
     public bool CanFishBite()
     {
@@ -418,6 +424,7 @@ public class ThirdPController : NetworkBehaviour
         {
             if (Input.GetMouseButtonDown(0)) debugCalculatedForce = 25f;
             animator.SetTrigger("cast");
+            ReproducirSonidoLanzamiento();
             StartCoroutine(ExecuteCastWithDelay(debugCalculatedForce));
         }
 
@@ -913,6 +920,28 @@ public class ThirdPController : NetworkBehaviour
             {
                 FishingHUDManager.Instance.ShowGesturePrompt(_currentRequestedGesture.ToString(), hits, attempts);
             }
+        }
+    }
+
+    public void ReproducirSonidoLanzamiento()
+    {
+        if (sfxSource != null && sfxLanzamiento != null)
+        {
+            sfxSource.PlayOneShot(sfxLanzamiento, 1.0f);
+        }
+    }
+
+    public void ReproducirResultadoPatron(bool exito)
+    {
+        if (sfxSource == null) return;
+
+        if (exito && sfxAciertoPatron != null)
+        {
+            sfxSource.PlayOneShot(sfxAciertoPatron, 1.0f);
+        }
+        else if (!exito && sfxFalloPatron != null)
+        {
+            sfxSource.PlayOneShot(sfxFalloPatron, 1.0f);
         }
     }
 }

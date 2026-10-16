@@ -92,3 +92,8 @@ Thumbs.db
 ehthumbs.db
 desktop.ini
 $RECYCLE.BIN/
+
+# Archivos temporales y de respaldo de editores
+*~
+*.bak
+*.tmp
