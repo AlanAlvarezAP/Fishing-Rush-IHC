@@ -144,6 +144,10 @@ public class ThirdPController : NetworkBehaviour
     public AudioClip sfxAciertoPatron;
     public AudioClip sfxFalloPatron;
 
+    public AudioClip sfxHazPatron;
+    public AudioClip sfxVictoriaMinijuego;
+    public AudioClip sfxDerrotaMinijuego;
+
     private float lastSentYaw = -999f;
     private float sendTimer = 0f;
     private bool hasRemoteYaw = false;
@@ -1034,5 +1038,51 @@ public class ThirdPController : NetworkBehaviour
     {
         netPlayerYaw.Value = yaw;
         hasRemoteYaw = true;
+    }
+
+
+    public void ReproducirInicioPatron()
+    {
+        if (sfxSource != null && sfxHazPatron != null)
+        {
+            sfxSource.PlayOneShot(sfxHazPatron, 1.0f);
+        }
+
+        if (AnunciosUI.Instance != null)
+        {
+            AnunciosUI.Instance.MostrarHazPatron();
+        }
+    }
+
+    public void ReproducirResultadoMinijuego(bool victoria)
+    {
+        if (victoria)
+        {
+            // 1. Audio Victoria
+            if (sfxSource != null && sfxVictoriaMinijuego != null)
+            {
+                sfxSource.PlayOneShot(sfxVictoriaMinijuego, 1.0f);
+            }
+
+            // 2. Anuncio Victoria en Pantalla
+            if (AnunciosUI.Instance != null)
+            {
+                AnunciosUI.Instance.MostrarVictoria();
+            }
+        }
+        else
+        {
+            // 1. Audio Derrota
+            if (sfxSource != null && sfxDerrotaMinijuego != null)
+            {
+                sfxSource.PlayOneShot(sfxDerrotaMinijuego, 1.0f);
+            }
+
+            // 2. Anuncio Derrota en Pantalla
+            if (AnunciosUI.Instance != null)
+            {
+                AnunciosUI.Instance.MostrarDerrota();
+            }
+        }
     }
 }

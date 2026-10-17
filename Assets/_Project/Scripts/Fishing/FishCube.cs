@@ -373,6 +373,7 @@ public class FishCube : NetworkBehaviour
         if (playerController != null)
         {
             playerController.isHookOccupied = true;
+            playerController.ReproducirInicioPatron();
         }
 
         if (evasiveTargetObject == null)
@@ -410,6 +411,11 @@ public class FishCube : NetworkBehaviour
             }
 
             FishingGesture expectedGesture = (FishingGesture)Random.Range(1, 5);
+
+            if (AnunciosUI.Instance != null)
+            {
+                AnunciosUI.Instance.MostrarGestoRequerido(expectedGesture, 1.5f);
+            }
 
             if (playerController != null)
             {
@@ -506,6 +512,11 @@ public class FishCube : NetworkBehaviour
         }
 
         bool isVictory = successfulFollows >= requiredSuccesses;
+
+        if (playerController != null)
+        {
+            playerController.ReproducirResultadoMinijuego(isVictory);
+        }
 
         if (ui != null)
         {
