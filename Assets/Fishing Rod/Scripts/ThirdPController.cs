@@ -1048,10 +1048,6 @@ public class ThirdPController : NetworkBehaviour
             sfxSource.PlayOneShot(sfxHazPatron, 1.0f);
         }
 
-        if (AnunciosUI.Instance != null)
-        {
-            AnunciosUI.Instance.MostrarHazPatron();
-        }
     }
 
     public void ReproducirResultadoMinijuego(bool victoria)
