@@ -18,6 +18,7 @@ public class BoatController : NetworkBehaviour
     [SerializeField] private bool debugLogs = true;
 
     private bool isBeingDriven = false;
+    private ThirdPController playerController;
 
     private NetworkVariable<Vector3> netBoatPos = new NetworkVariable<Vector3>(
         Vector3.zero, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
@@ -62,11 +63,16 @@ public class BoatController : NetworkBehaviour
  
         if (hasAuthority)
         {
-            if (isBeingDriven)
+            if (playerController == null) 
+                playerController = FindObjectOfType<ThirdPController>();
+
+            bool estaPescando = playerController != null && playerController.isFishing;
+
+            if (isBeingDriven && !estaPescando)
             {
                 ApplyMovement(ReadInput());
             }
- 
+
             if (!offline && IsSpawned)
             {
                 netBoatPos.Value = transform.position;

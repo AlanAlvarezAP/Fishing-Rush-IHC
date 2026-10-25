@@ -92,11 +92,10 @@ public class FishCube : NetworkBehaviour
 
                 if (fishMotion != null)
                 {
-                    // En el cliente desactivamos la IA autónoma local para que no se desvíe del Host,
-                    // pero mantenemos el componente enabled para que reproduzca animaciones
                     if (!IsServer)
                     {
                         fishMotion.SetAutoMotion(false);
+                        //fishMotion.enabled = false;
                     }
                 }
                 break;

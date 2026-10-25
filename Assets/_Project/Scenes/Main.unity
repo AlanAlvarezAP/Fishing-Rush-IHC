@@ -3889,7 +3889,7 @@ MonoBehaviour:
   clientBtn: {fileID: 1378547361}
   uiContainer: {fileID: 1388962851}
   hudContainer: {fileID: 423686160}
-  pcIPAddress: 10.142.200.139
+  pcIPAddress: 10.246.235.139
   port: 7777
 --- !u!1 &367431902
 GameObject:
@@ -4620,7 +4620,6 @@ MonoBehaviour:
   iconVertical: {fileID: 21300000, guid: 6c4f49598ae6fe243b9c42ae301f9cd8, type: 3}
   iconCircle: {fileID: 21300000, guid: 9ebdf607c46cdd642b96bbf9b438a935, type: 3}
   iconCross: {fileID: 21300000, guid: 784ba5e946e70744291777986d30e91a, type: 3}
-  colorInicio: {r: 1, g: 1, b: 1, a: 1}
   colorVictoria: {r: 0.17715193, g: 0.5245282, b: 0.17715193, a: 1}
   colorDerrota: {r: 0.6679245, g: 0.1499679, b: 0.1499679, a: 1}
 --- !u!65 &437796843
@@ -14574,9 +14573,9 @@ MonoBehaviour:
   m_MaxConnectAttempts: 60
   m_DisconnectTimeoutMS: 30000
   ConnectionData:
-    Address: 10.142.200.139
+    Address: 10.246.235.139
     Port: 7777
-    ServerListenAddress: 10.142.200.139
+    ServerListenAddress: 10.246.235.139
   DebugSimulator:
     PacketDelayMS: 0
     PacketJitterMS: 0
@@ -20304,6 +20303,11 @@ PrefabInstance:
         type: 3}
       propertyPath: m_Name
       value: RodTip
+      objectReference: {fileID: 0}
+    - target: {fileID: 3973668979630334273, guid: 257f9f09ec1cf4240b175641a456adfd,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4359791766550691380, guid: 257f9f09ec1cf4240b175641a456adfd,
         type: 3}

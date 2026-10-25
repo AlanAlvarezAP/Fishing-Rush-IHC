@@ -951,13 +951,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3973668979630334273}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
-  m_LocalPosition: {x: 0, y: 0.5, z: 0.85}
-  m_LocalScale: {x: 0.1, y: 0.75, z: 0.1}
+  m_LocalRotation: {x: -0.7054128, y: -0.00409211, z: -0.0042689918, w: -0.7087721}
+  m_LocalPosition: {x: 0, y: 1.4999999, z: 0.85000026}
+  m_LocalScale: {x: 0.10000114, y: 0.74999803, z: 0.1000003}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 2604924809172461127}
-  m_LocalEulerAnglesHint: {x: 90, y: 0, z: 0}
+  m_Father: {fileID: 7684147590232592765}
+  m_LocalEulerAnglesHint: {x: -1.139, y: 90, z: -21.871}
 --- !u!33 &3386410911857696447
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -1785,7 +1785,6 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 3382326588731418626}
   - {fileID: 7684147590232592765}
   - {fileID: 954634196201066998}
   - {fileID: 7081656341331363205}
@@ -1893,6 +1892,9 @@ MonoBehaviour:
   sfxLanzamiento: {fileID: 0}
   sfxAciertoPatron: {fileID: 0}
   sfxFalloPatron: {fileID: 0}
+  sfxHazPatron: {fileID: 0}
+  sfxVictoriaMinijuego: {fileID: 0}
+  sfxDerrotaMinijuego: {fileID: 0}
 --- !u!54 &2557545417108597661
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -2224,6 +2226,10 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects:
+    - targetCorrespondingSourceObject: {fileID: 400138, guid: 11d723d356152494ea1f1dc10ed906ef,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3382326588731418626}
     - targetCorrespondingSourceObject: {fileID: 400018, guid: 11d723d356152494ea1f1dc10ed906ef,
         type: 3}
       insertIndex: -1
