@@ -503,55 +503,6 @@ public class ThirdPController : NetworkBehaviour
 
         // --- MOVIMIENTO ---
         /*
-        if (!isFishing)
-        {
-            float horizontal = Input.GetAxisRaw("Horizontal");
-            float vertical = Input.GetAxisRaw("Vertical");
-
-            if (wiiHorizontal != 0f) horizontal = wiiHorizontal;
-            if (wiiVertical != 0f) vertical = wiiVertical;
-
-            Vector3 inputDir = new Vector3(horizontal, 0f, vertical).normalized;
-            targetVelY = Mathf.Clamp01(inputDir.magnitude);
-
-            //Vector3 direction = new Vector3(horizontal, 0, vertical).normalized;
-            if (inputDir.magnitude >= 0.1f)
-            {
-                Transform camTransform = camera != null ? camera : (Camera.main != null ? Camera.main.transform : transform);
-
-                float targetAngle = Mathf.Atan2(inputDir.x, inputDir.z) * Mathf.Rad2Deg + camTransform.eulerAngles.y;
-                float angle = Mathf.SmoothDampAngle(transform.eulerAngles.y, targetAngle, ref turnSmoothingVelocity, turnSmoothingTime);
-
-                transform.rotation = Quaternion.Euler(0f, angle, 0f);
-
-                if (animator != null && animator.transform != transform)
-                {
-                    animator.transform.localRotation = Quaternion.identity;
-                }
-
-                Vector3 moveDirection = Quaternion.Euler(0f, targetAngle, 0f) * Vector3.forward;
-
-                if (controller.isGrounded)
-                {
-                    if (bhopEnabled)
-                    {
-                        if (Input.GetButton("Jump") || wiiJumpHeld) Jump();
-                    }
-                    else
-                    {
-                        if (Input.GetButtonDown("Jump") || wiiJumpDown) Jump();
-                    }
-                    currentSpeed = speed;
-                }
-                if (controller != null && controller.enabled)
-                {
-                    controller.Move(moveDirection * currentSpeed * Time.deltaTime);
-                }
-            }
-        }
-        */
-
-        /*
         if (controller.isGrounded)
         {
             if (bhopEnabled)
@@ -919,6 +870,20 @@ public class ThirdPController : NetworkBehaviour
     {
         if (!IsSpawned) return;
 
+#if UNITY_EDITOR || UNITY_STANDALONE
+        float rotSpeed = 90f;
+        if (Input.GetKey(KeyCode.Z))
+        {
+            netPlayerYaw.Value -= rotSpeed * Time.deltaTime;
+            hasRemoteYaw = true;
+        }
+        if (Input.GetKey(KeyCode.X))
+        {
+            netPlayerYaw.Value += rotSpeed * Time.deltaTime;
+            hasRemoteYaw = true;
+        }
+#endif
+
         Transform rotTarget = (animator != null && animator.transform != transform) ? animator.transform : transform;
         float targetYaw = 0f;
         bool haveYaw = false;
@@ -954,6 +919,9 @@ public class ThirdPController : NetworkBehaviour
             float y = Mathf.LerpAngle(rotTarget.eulerAngles.y, targetYaw, t);
             rotTarget.rotation = Quaternion.Euler(0f, y, 0f);
         }
+
+        if (IsOwner && isFishing && rodTip != null)
+            Debug.Log($"[ROD] rodTip dentro del modelo que rota: {rodTip.IsChildOf(rotTarget)} | pos={rodTip.position}");
 
         if (IsOwner && isFishing && (!alreadyCast || isCastingInProcess) && !isReeling
             && hookObject != null && hookObject.activeSelf && rodTip != null)
