@@ -920,9 +920,6 @@ public class ThirdPController : NetworkBehaviour
             rotTarget.rotation = Quaternion.Euler(0f, y, 0f);
         }
 
-        if (IsOwner && isFishing && rodTip != null)
-            Debug.Log($"[ROD] rodTip dentro del modelo que rota: {rodTip.IsChildOf(rotTarget)} | pos={rodTip.position}");
-
         if (IsOwner && isFishing && (!alreadyCast || isCastingInProcess) && !isReeling
             && hookObject != null && hookObject.activeSelf && rodTip != null)
         {
