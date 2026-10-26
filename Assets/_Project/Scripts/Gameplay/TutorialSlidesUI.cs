@@ -17,13 +17,8 @@ using WiimoteApi;
 /// </summary>
 public class TutorialSlidesUI : NetworkBehaviour
 {
-    [Header("UI del Visor")]
-    [SerializeField] private GameObject panelImagenContenedor;
-    [SerializeField] private Image displayImage;
-    [SerializeField] private TextMeshProUGUI slideCounterText;
-
-    [Header("Las Slides del Tutorial")]
-    [SerializeField] private Sprite[] tutorialSlides;
+    [Header("Paneles de las Slides del Tutorial")]
+    [SerializeField] private GameObject[] panelesTutorial;
 
     [Header("Objetos de Escena")]
     [SerializeField] private GameObject fishSpawnerManager;
@@ -161,27 +156,22 @@ public class TutorialSlidesUI : NetworkBehaviour
         LimpiarPecesDePrueba();
     }
 
-    // ---------------- VISTA (la ejecutan PC y celular) ----------------
-    // SOLO toca UI. Nada de resets, fisica ni controladores aqui.
     private void AplicarVista(int index, bool visible)
     {
         if (!isActiveAndEnabled) return;
 
-        // 1. Primero la imagen, para que nada posterior pueda impedir el cambio de slide
-        if (panelImagenContenedor != null) panelImagenContenedor.SetActive(visible);
-        if (displayImage != null) displayImage.gameObject.SetActive(visible);
-        if (slideCounterText != null) slideCounterText.gameObject.SetActive(visible);
+        OcultarUIAllSlides();
 
-        if (visible && tutorialSlides != null && index >= 0 && index < tutorialSlides.Length)
+        if (visible && panelesTutorial != null && index >= 0 && index < panelesTutorial.Length)
         {
-            if (displayImage != null) displayImage.sprite = tutorialSlides[index];
-            if (slideCounterText != null) slideCounterText.text = $"{index + 1} / {tutorialSlides.Length}";
+            if (panelesTutorial[index] != null)
+            {
+                panelesTutorial[index].SetActive(true);
+            }
         }
 
-        // 2. HUD: oculto durante el slide, visible durante las pruebas
         AplicarHUD(!visible);
 
-        // 3. Cursor: solo importa en la PC
         if (!EsVisor)
         {
             Cursor.lockState = visible ? CursorLockMode.None : CursorLockMode.Locked;
@@ -315,10 +305,9 @@ public class TutorialSlidesUI : NetworkBehaviour
         }
     }
 
-    // ---------------- SLIDES ----------------
     private void MostrarSlideActual()
     {
-        if (tutorialSlides == null || currentSlideIndex >= tutorialSlides.Length)
+        if (panelesTutorial == null || currentSlideIndex >= panelesTutorial.Length)
         {
             FinalizarTutorial();
             return;
@@ -326,7 +315,6 @@ public class TutorialSlidesUI : NetworkBehaviour
 
         estadoActual = EstadoTutorial.MostrandoSlide;
 
-        // Publica el slide y deja la escena en modo slide (PC y celular)
         SetEstado(currentSlideIndex, true);
 
         if (ObtenerMenu() == null) PrepararEscenaSlideSinMenu();
@@ -336,7 +324,7 @@ public class TutorialSlidesUI : NetworkBehaviour
     {
         currentSlideIndex++;
 
-        if (tutorialSlides == null || currentSlideIndex >= tutorialSlides.Length)
+        if (panelesTutorial == null || currentSlideIndex >= panelesTutorial.Length)
         {
             FinalizarTutorial();
         }
@@ -355,7 +343,6 @@ public class TutorialSlidesUI : NetworkBehaviour
         MenuMismaEscena menuManager = ObtenerMenu();
         if (menuManager != null)
         {
-            // MenuMismaEscena ya avisa al celular por su propio ClientRpc
             menuManager.CerrarPanelTutorial();
         }
         else
@@ -364,7 +351,6 @@ public class TutorialSlidesUI : NetworkBehaviour
         }
     }
 
-    // ---------------- RESPALDO SIN MenuMismaEscena (la escena normal si lo tiene) ----------------
     private void PrepararEscenaSlideSinMenu()
     {
         try
@@ -407,12 +393,10 @@ public class TutorialSlidesUI : NetworkBehaviour
         }
     }
 
-    // ---------------- PRUEBA 1: MOVIMIENTO ----------------
     private void IniciarPruebaMovimiento()
     {
         estadoActual = EstadoTutorial.ProbandoMovimiento;
 
-        // Oculta el slide y pone la escena en modo prueba (PC y celular)
         SetEstado(currentSlideIndex, false);
 
         if (ObtenerMenu() == null) PrepararEscenaPruebaSinMenu();
@@ -429,7 +413,6 @@ public class TutorialSlidesUI : NetworkBehaviour
         MostrarSlideActual();
     }
 
-    // ---------------- PRUEBA 2: PESCA CERCANA ----------------
     private void IniciarPruebaPescaCercana()
     {
         estadoActual = EstadoTutorial.ProbandoPescaCercana;
@@ -634,12 +617,16 @@ public class TutorialSlidesUI : NetworkBehaviour
         }
     }
 
-    // ---------------- UTILIDADES ----------------
     private void OcultarUIAllSlides()
     {
-        if (panelImagenContenedor != null) panelImagenContenedor.SetActive(false);
-        if (displayImage != null) displayImage.gameObject.SetActive(false);
-        if (slideCounterText != null) slideCounterText.gameObject.SetActive(false);
+        if (panelesTutorial != null)
+        {
+            for (int i = 0; i < panelesTutorial.Length; i++)
+            {
+                if (panelesTutorial[i] != null)
+                    panelesTutorial[i].SetActive(false);
+            }
+        }
     }
 
     private MenuMismaEscena ObtenerMenu()
