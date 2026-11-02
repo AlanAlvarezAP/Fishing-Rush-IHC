@@ -73,9 +73,25 @@ public class ThirdPController : NetworkBehaviour
     //    Quaternion.identity, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner
     //);
 
+    // Solo el SERVIDOR escribe el yaw (lo recibe del celular VR por RPC). El resto solo lee.
     private NetworkVariable<float> netPlayerYaw = new NetworkVariable<float>(
-        0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner
+        0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     );
+
+    // El dueño (PC) avisa si el anzuelo esta colgando de la caña (aun sin lanzar).
+    // Asi el celular lo pega a SU propia punta de caña al instante, sin esperar la red.
+    private NetworkVariable<bool> netHookHanging = new NetworkVariable<bool>(
+        false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner
+    );
+
+    // Estado "estoy pescando" replicado: los clientes lo usan para animar al modelo,
+    // mostrar la caña, la linea y el anzuelo (no dependen de un RPC puntual).
+    private NetworkVariable<bool> netIsFishing = new NetworkVariable<bool>(
+        false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner
+    );
+
+    [Header("Debug")]
+    [SerializeField] private bool debugHookCliente = false;
 
     [Header("Referencias de Pesca")]
     public GameObject fishingRod;
@@ -162,6 +178,11 @@ public class ThirdPController : NetworkBehaviour
         return isFishing && alreadyCast && !isReeling && !isCastingInProcess;
     }
 
+    void Awake()
+    {
+        Debug.Log("[DIAGNOSTICO] ThirdPController inicializado en el objeto: " + gameObject.name);
+    }
+
     void Start()
     {
         controller = GetComponent<CharacterController>();
@@ -208,7 +229,13 @@ public class ThirdPController : NetworkBehaviour
 
     void Update()
     {
-        if (!IsOwner) return;
+        //Debug.Log($"[UPDATE RUNNING] scriptEnabled={enabled} | isFishing={isFishing}");
+        //if (!IsOwner) return;
+        var nm = NetworkManager.Singleton;
+        bool offline = nm == null || !nm.IsListening;
+        bool tieneControl = offline || IsOwner || IsServer;
+
+        if (!tieneControl) return;
         /*
         if (Input.GetKeyDown(KeyCode.Escape))
         {
@@ -376,7 +403,7 @@ public class ThirdPController : NetworkBehaviour
                 if (animator != null) animator.SetBool("startFishing", true);
                 isFishing = true;
                 currentVelY = 0f;
-                targetVelY = 0f;
+                //targetVelY = 0f;
                 if (animator != null) animator.SetFloat("velY", 0f);
 
                 Vector3 initPos = rodTip != null ? rodTip.position + (Vector3.down * hangDistance) : transform.position;
@@ -440,6 +467,7 @@ public class ThirdPController : NetworkBehaviour
         {
             if (Input.GetMouseButtonDown(0)) debugCalculatedForce = 25f;
             animator.SetTrigger("cast");
+            SyncAnimTrigger(0);
             ReproducirSonidoLanzamiento();
             StartCoroutine(ExecuteCastWithDelay(debugCalculatedForce));
         }
@@ -516,8 +544,43 @@ public class ThirdPController : NetworkBehaviour
         }
         */
 
-        targetVelY = 0f;
+        if (!isFishing)
+        {
+            float horizontal = Input.GetAxisRaw("Horizontal");
+            float vertical = Input.GetAxisRaw("Vertical");
 
+            if (wiiHorizontal != 0f) horizontal = wiiHorizontal;
+            if (wiiVertical != 0f) vertical = wiiVertical;
+
+            Vector3 inputDir = new Vector3(horizontal, 0f, vertical);
+
+            //Vector3 inputDir = new Vector3(horizontal, 0f, vertical).normalized;
+            //targetVelY = Mathf.Clamp01(inputDir.magnitude);
+
+            if (inputDir.sqrMagnitude >= 0.01f)
+            {
+                /*
+                Transform camTransform = camera != null ? camera : (Camera.main != null ? Camera.main.transform : transform);
+
+                Vector3 camForward = Vector3.ProjectOnPlane(camTransform.forward, Vector3.up).normalized;
+                Vector3 camRight = Vector3.ProjectOnPlane(camTransform.right, Vector3.up).normalized;
+
+                Vector3 moveDirection = (camForward * vertical + camRight * horizontal).normalized;
+                */
+                Transform targetModel = (animator != null && animator.transform != transform) ? animator.transform : transform;
+                Vector3 moveDirection = (targetModel.forward * vertical + targetModel.right * horizontal).normalized;
+
+                currentSpeed = speed;
+
+                bool controllerListo = controller != null && controller.enabled;
+                if (controllerListo)
+                {
+                    controller.Move(moveDirection * currentSpeed * Time.deltaTime);
+                }
+            }
+        }
+
+        // --- ACTUALIZACIÓN DE ANIMADOR Y GRAVEDAD ---
         currentVelY = Mathf.Lerp(currentVelY, targetVelY, speedChangeRate);
         if (animator != null)
         {
@@ -538,16 +601,6 @@ public class ThirdPController : NetworkBehaviour
 
             controller.Move(playerVelocity * Time.deltaTime);
         }
-
-        //if (controller.isGrounded && playerVelocity.y < 0)
-        //{
-        //    if (animator != null) animator.SetBool("isGrounded", true);
-        //    playerVelocity.y = -2f;
-        //}
-        //else
-        //{
-        //    playerVelocity.y += gravityFactor * gravity * Time.deltaTime;
-        //}
     }
 
     private IEnumerator ExecuteCastWithDelay(float force)
@@ -574,12 +627,9 @@ public class ThirdPController : NetworkBehaviour
                 hookRb.velocity = Vector3.zero;
                 hookRb.angularVelocity = Vector3.zero;
 
-                Transform camTransform = camera != null ? camera : (Camera.main != null ? Camera.main.transform : transform);
-                //Vector3 throwDirection = camTransform.forward * force + Vector3.up * (force * 0.35f);
-
-                Vector3 aimDir = camTransform.forward;
-                if (hasRemoteYaw)
-                    aimDir = Quaternion.Euler(0f, netPlayerYaw.Value, 0f) * Vector3.forward;
+                // Direccion = frente del MODELO, solo eje Y (el modelo ya sigue la vista del celular)
+                Transform modelo = (animator != null && animator.transform != transform) ? animator.transform : transform;
+                Vector3 aimDir = Vector3.ProjectOnPlane(modelo.forward, Vector3.up).normalized;
 
                 Vector3 throwDirection = aimDir * force + Vector3.up * (force * 0.35f);
 
@@ -593,6 +643,7 @@ public class ThirdPController : NetworkBehaviour
     private void StartReeling()
     {
         animator.SetTrigger("reel");
+        SyncAnimTrigger(1);
         isReeling = true;
         isHookOccupied = false;
         currentRequestedGesture = FishCube.FishingGesture.None;
@@ -841,12 +892,27 @@ public class ThirdPController : NetworkBehaviour
 
     private void OnEnable()
     {
+        if (controller == null) controller = GetComponent<CharacterController>();
+        if (controller != null) controller.enabled = true;
+
         if (isFishing)
         {
             if (fishingRod != null) fishingRod.SetActive(true);
             if (lineObject != null) lineObject.SetActive(true);
             if (hookObject != null) hookObject.SetActive(true);
         }
+    }
+
+    private void SyncAnimTrigger(int id)
+    {
+        if (IsSpawned && IsServer) PlayAnimTriggerClientRpc(id);
+    }
+
+    [ClientRpc]
+    private void PlayAnimTriggerClientRpc(int id)
+    {
+        if (IsOwner || animator == null) return;
+        animator.SetTrigger(id == 0 ? "cast" : "reel");
     }
 
     [ClientRpc]
@@ -870,32 +936,83 @@ public class ThirdPController : NetworkBehaviour
     {
         if (!IsSpawned) return;
 
+        Transform rotTarget = (animator != null && animator.transform != transform) ? animator.transform : transform;
+        Transform camTransform = camera != null ? camera : (Camera.main != null ? Camera.main.transform : null);
+
 #if UNITY_EDITOR || UNITY_STANDALONE
-        float rotSpeed = 90f;
-        if (Input.GetKey(KeyCode.Z))
+        // Pruebas en PC (rol VR sin celular): Z/X giran la camara y el modelo la sigue
+        if (camTransform != null)
         {
-            netPlayerYaw.Value -= rotSpeed * Time.deltaTime;
-            hasRemoteYaw = true;
-        }
-        if (Input.GetKey(KeyCode.X))
-        {
-            netPlayerYaw.Value += rotSpeed * Time.deltaTime;
-            hasRemoteYaw = true;
+            float rotSpeed = 90f;
+            if (Input.GetKey(KeyCode.Z)) 
+            {
+                camTransform.Rotate(Vector3.up, -rotSpeed * Time.deltaTime, Space.World);
+            }
+            if (Input.GetKey(KeyCode.X)) 
+            {
+                camTransform.Rotate(Vector3.up, rotSpeed * Time.deltaTime, Space.World);
+            }
         }
 #endif
 
-        Transform rotTarget = (animator != null && animator.transform != transform) ? animator.transform : transform;
+        bool esVR = ConfigJugador.RolActual == TipoJugador.Jugador1_PescadorVR;
+
+        // ---------------------------------------------------------------
+        // ESTADO DE PESCA
+        //   PC (dueño)       : publica isFishing
+        //   Celular/Tablet   : refleja animacion, caña, linea y anzuelo desde la variable
+        // ---------------------------------------------------------------
+        if (IsOwner)
+        {
+            if (netIsFishing.Value != isFishing) netIsFishing.Value = isFishing;
+        }
+        else
+        {
+            bool pescando = netIsFishing.Value;
+
+            if (animator != null && animator.GetBool("startFishing") != pescando)
+                animator.SetBool("startFishing", pescando);
+
+            if (fishingRod != null && fishingRod.activeSelf != pescando)
+                fishingRod.SetActive(pescando);
+
+            if (lineObject != null && lineObject.activeSelf != pescando)
+            {
+                lineObject.SetActive(pescando);
+                if (pescando && verletScript != null) verletScript.ResetRope();
+            }
+
+            if (hookObject != null && hookObject.activeSelf != pescando)
+            {
+                if (pescando)
+                {
+                    SetHookKinematic(true);
+                    if (rodTip != null)
+                        hookObject.transform.SetPositionAndRotation(rodTip.position + Vector3.down * hangDistance, rodTip.rotation);
+                }
+                hookObject.SetActive(pescando);
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // YAW: unica fuente de verdad = la vista del celular VR (solo eje Y)
+        //   Celular VR (cliente) : aplica su propia vista al instante y la manda al servidor
+        //   PC (servidor)        : recibe el yaw del celular (RPC) y lo aplica al modelo
+        //   Tablet (cliente)     : solo refleja netPlayerYaw
+        // IMPORTANTE: el jugador pertenece al SERVIDOR, asi que en el celular IsOwner es false.
+        // ---------------------------------------------------------------
         float targetYaw = 0f;
         bool haveYaw = false;
+        bool aplicarInstantaneo = false;
 
         if (!IsServer)
         {
-            Transform camTransform = camera != null ? camera : (Camera.main != null ? Camera.main.transform : null);
-            if (camTransform != null)
+            if (esVR && camTransform != null)
             {
                 float currentYaw = camTransform.eulerAngles.y;
                 targetYaw = currentYaw;
                 haveYaw = true;
+                aplicarInstantaneo = true; // en VR el modelo/caña deben seguir la vista sin retraso
 
                 sendTimer += Time.deltaTime;
                 if (sendTimer >= 0.05f &&
@@ -906,38 +1023,82 @@ public class ThirdPController : NetworkBehaviour
                     TransmitirYawServerRpc(currentYaw);
                 }
             }
+            else
+            {
+                targetYaw = netPlayerYaw.Value; // tablet: solo visualiza
+                haveYaw = true;
+            }
         }
-        else if (hasRemoteYaw)
+        else
         {
-            targetYaw = netPlayerYaw.Value;
-            haveYaw = true;
+            if (hasRemoteYaw)
+            {
+                targetYaw = netPlayerYaw.Value; // viene del celular
+                haveYaw = true;
+            }
+            else if (esVR && camTransform != null)
+            {
+                // PC en rol VR sin celular conectado (pruebas)
+                targetYaw = camTransform.eulerAngles.y;
+                netPlayerYaw.Value = targetYaw;
+                haveYaw = true;
+            }
         }
 
         if (haveYaw)
         {
-            float t = 1f - Mathf.Exp(-12f * Time.deltaTime);
-            float y = Mathf.LerpAngle(rotTarget.eulerAngles.y, targetYaw, t);
-            rotTarget.rotation = Quaternion.Euler(0f, y, 0f);
-        }
-
-        if (IsOwner && isFishing && (!alreadyCast || isCastingInProcess) && !isReeling
-            && hookObject != null && hookObject.activeSelf && rodTip != null)
-        {
-            Vector3 hangPos = rodTip.position + Vector3.down * hangDistance;
-            hookObject.transform.SetPositionAndRotation(hangPos, rodTip.rotation);
-            if (hookRb != null)
+            if (aplicarInstantaneo)
             {
-                hookRb.position = hangPos;
-                hookRb.rotation = rodTip.rotation;
+                rotTarget.rotation = Quaternion.Euler(0f, targetYaw, 0f);
+            }
+            else
+            {
+                float t = 1f - Mathf.Exp(-12f * Time.deltaTime);
+                float y = Mathf.LerpAngle(rotTarget.eulerAngles.y, targetYaw, t);
+                rotTarget.rotation = Quaternion.Euler(0f, y, 0f);
             }
         }
 
-        if (hookObject != null && hookObject.activeSelf)
+        // ---------------------------------------------------------------
+        // ANZUELO
+        // ---------------------------------------------------------------
+        bool colgando = isFishing && (!alreadyCast || isCastingInProcess) && !isReeling
+                        && hookObject != null && hookObject.activeSelf && rodTip != null;
+
+        if (IsOwner || IsServer)
         {
-            if (IsOwner)
+            // El servidor o dueño actualiza el anzuelo en la punta de la caña en cada frame
+            if (colgando)
+            {
+                Vector3 hangPos = rodTip.position + Vector3.down * hangDistance;
+                hookObject.transform.SetPositionAndRotation(hangPos, rodTip.rotation);
+                if (hookRb != null)
+                {
+                    hookRb.position = hangPos;
+                    hookRb.rotation = rodTip.rotation;
+                }
+            }
+
+            if (netHookHanging.Value != colgando) netHookHanging.Value = colgando;
+
+            if (hookObject != null && hookObject.activeSelf)
             {
                 netHookPos.Value = hookObject.transform.position;
                 netHookRot.Value = hookObject.transform.rotation;
+            }
+        }
+        else if (hookObject != null && hookObject.activeSelf)
+        {
+            // El cliente pega el anzuelo a su propio rodTip sin depender del lag de red
+            if (netHookHanging.Value && rodTip != null)
+            {
+                Vector3 hangPos = rodTip.position + Vector3.down * hangDistance;
+                hookObject.transform.SetPositionAndRotation(hangPos, rodTip.rotation);
+                if (hookRb != null)
+                {
+                    hookRb.position = hangPos;
+                    hookRb.rotation = rodTip.rotation;
+                }
             }
             else
             {

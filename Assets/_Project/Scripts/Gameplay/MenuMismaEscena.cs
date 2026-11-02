@@ -11,7 +11,6 @@ using WiimoteApi;
 
 public class MenuMismaEscena : NetworkBehaviour
 {
-    // Acciones del HUD de pesca que la PC le reenvia al celular (ver FishingHUDManager)
     public enum HudPescaAccion
     {
         Potencia = 0,
@@ -21,6 +20,12 @@ public class MenuMismaEscena : NetworkBehaviour
         OcultarVentanaTiro = 4,
         OcultarTodo = 5
     }
+
+    [Header("UI Controles Conductor Tablet")]
+    public GameObject panelControlesBote;
+
+    [Header("Cámara Bote (Jugador 2 - Tablet)")]
+    public GameObject camaraBoteTablet;
 
     [Header("UI Canvases Principales")]
     public GameObject canvasMenu;
@@ -56,7 +61,6 @@ public class MenuMismaEscena : NetworkBehaviour
 
     private bool tutorialCompletado = false;
 
-
     [SerializeField] private TextMeshProUGUI finalScoreText;
 
     [Header("UI Estado Jugador")]
@@ -81,12 +85,19 @@ public class MenuMismaEscena : NetworkBehaviour
     private bool wasWiiUp = false;
     private bool wasWiiDown = false;
 
+    private Vector3 jugadorLocalPosInicial;
+    private Quaternion jugadorLocalRotInicial;
+
     private NetworkVariable<int> selectedButtonIndexNet = new NetworkVariable<int>(
         0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner
     );
 
     private NetworkVariable<bool> isMenuVisibleNet = new NetworkVariable<bool>(
         true, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner
+    );
+
+    private NetworkVariable<bool> isGameStartedNet = new NetworkVariable<bool>(
+        false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     );
 
     public override void OnNetworkSpawn()
@@ -101,6 +112,23 @@ public class MenuMismaEscena : NetworkBehaviour
         {
             if (canvasMenu != null) canvasMenu.SetActive(newVal);
         };
+
+        isGameStartedNet.OnValueChanged += (oldVal, newVal) =>
+        {
+            if (newVal)
+            {
+                OcultarMenuYEmpezarLocal();
+            }
+            else
+            {
+                MostrarMenuLocal();
+            }
+        };
+
+        if (isGameStartedNet.Value)
+        {
+            OcultarMenuYEmpezarLocal();
+        }
     }
 
     void Awake()
@@ -135,6 +163,12 @@ public class MenuMismaEscena : NetworkBehaviour
     void Start()
     {
         Time.timeScale = 1f;
+
+        if (ConfigJugador.RolActual == TipoJugador.Jugador2_ConductorTablet)
+        {
+            if (panelWiimote != null) panelWiimote.SetActive(false);
+            if (btnWiimote != null) btnWiimote.gameObject.SetActive(false);
+        }
 
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -251,6 +285,7 @@ public class MenuMismaEscena : NetworkBehaviour
     [ServerRpc(RequireOwnership = false)]
     private void EmpezarJuegoServerRpc()
     {
+        isGameStartedNet.Value = true;
         OcultarMenuYEmpezarLocal();
         EmpezarJuegoClientRpc();
     }
@@ -261,9 +296,14 @@ public class MenuMismaEscena : NetworkBehaviour
         if (IsSpawned)
         {
             if (IsServer || IsHost)
+            {
+                isGameStartedNet.Value = true;
                 EmpezarJuegoClientRpc();
+            }
             else
+            {
                 EmpezarJuegoServerRpc();
+            }
         }
     }
 
@@ -283,6 +323,12 @@ public class MenuMismaEscena : NetworkBehaviour
 
         ResetearPosicionesOriginales();
 
+        if (panelControlesBote != null)
+        {
+            bool esConductor = ConfigJugador.RolActual == TipoJugador.Jugador2_ConductorTablet;
+            panelControlesBote.SetActive(esConductor);
+        }
+
         if (FishingCounterManager.Instance != null)
         {
             FishingCounterManager.Instance.ResetCounter();
@@ -296,9 +342,16 @@ public class MenuMismaEscena : NetworkBehaviour
         if (boteObjeto != null)
         {
             SetBoteVisible(true);
-            var toggle = boteObjeto.GetComponent<BoatDriverToggle>();
-            if (toggle != null) toggle.ActivarModoConduccionPermanente();
+            var bc = boteObjeto.GetComponent<BoatController>();
+            if (bc != null) bc.SetDrivingState(true);
+
+            GarantizarJugador();
+            if (playerController != null) playerController.enabled = true;
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
         }
+
+        if (rodObjeto != null) rodObjeto.SetActive(true);
 
         if (canvasGameHUD != null)
         {
@@ -312,10 +365,45 @@ public class MenuMismaEscena : NetworkBehaviour
             }
         }
 
+        // --- ACTIVACIÓN Y CONFIGURACIÓN DE CÁMARAS SEGÚN ROL ---
         GarantizarJugador();
+
+        // Buscamos el componente Camera interno del personaje VR
+        Camera vrCamComponent = null;
         if (playerController != null)
         {
-            playerController.enabled = true;
+            vrCamComponent = playerController.GetComponentInChildren<Camera>(true);
+        }
+
+        if (ConfigJugador.RolActual == TipoJugador.Jugador2_ConductorTablet)
+        {
+            if (playerController != null) playerController.enabled = false;
+            if (vrCamComponent != null) vrCamComponent.gameObject.SetActive(false);
+            if (camaraBoteTablet != null) 
+            {
+                camaraBoteTablet.SetActive(true);
+                Camera camBote = camaraBoteTablet.GetComponent<Camera>();
+                if (camBote != null) camBote.enabled = true;
+            }
+
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
+        else // Jugador1_PescadorVR
+        {
+            // 1. Apagar cámara del bote
+            if (camaraBoteTablet != null) camaraBoteTablet.SetActive(false);
+
+            if (playerController != null)
+            {
+                playerController.enabled = true;
+                
+                if (vrCamComponent != null) vrCamComponent.gameObject.SetActive(true);
+
+                CharacterController cc = playerController.GetComponent<CharacterController>();
+                if (cc != null) cc.enabled = true;
+            }
+
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
         }
@@ -325,6 +413,7 @@ public class MenuMismaEscena : NetworkBehaviour
         {
             timerHUD.StartTimer();
         }
+        Debug.Log($"[JUEGO] rol={ConfigJugador.RolActual} player={(playerController != null ? playerController.name + " enabled=" + playerController.enabled : "null")}");
     }
 
     // --- PANEL WIIMOTE ---
@@ -575,6 +664,11 @@ public class MenuMismaEscena : NetworkBehaviour
     {
         Time.timeScale = 1f;
 
+        if (IsServer && IsSpawned)
+        {
+            isGameStartedNet.Value = false;
+        }
+
         if (canvasGameOver != null) canvasGameOver.SetActive(false);
 
         FishSpawner spawner = FindObjectOfType<FishSpawner>();
@@ -596,6 +690,8 @@ public class MenuMismaEscena : NetworkBehaviour
 
     private void ApagarJugador()
     {
+        if (camaraBoteTablet != null) camaraBoteTablet.SetActive(false);
+
         if (boteObjeto != null)
         {
             SetBoteVisible(false);
@@ -611,6 +707,7 @@ public class MenuMismaEscena : NetworkBehaviour
             if (p != null) p.enabled = false;
         }
     }
+
     private void GuardarPosicionesIniciales()
     {
         if (posicionesGuardadas) return;
@@ -621,15 +718,19 @@ public class MenuMismaEscena : NetworkBehaviour
             boteRotInicial = boteObjeto.transform.rotation;
         }
 
-        jugadorPosInicial = new Vector3(0f, 1.0f, 0f);
-        jugadorRotInicial = Quaternion.identity;
-
-        //GarantizarJugador();
-        //if (playerController != null)
-        //{
-        //    jugadorPosInicial = playerController.transform.position;
-        //    jugadorRotInicial = playerController.transform.rotation;
-        //}
+        GarantizarJugador();
+        if (playerController != null)
+        {
+            // Guardamos la posición LOCAL exacta que le pusiste en el Inspector dentro del bote
+            jugadorLocalPosInicial = playerController.transform.localPosition;
+            jugadorLocalRotInicial = playerController.transform.localRotation;
+        }
+        else
+        {
+            // Respaldo por defecto sobre la cubierta (3.25m en Y)
+            jugadorLocalPosInicial = new Vector3(0f, 3.25f, 0f);
+            jugadorLocalRotInicial = Quaternion.identity;
+        }
 
         posicionesGuardadas = true;
     }
@@ -642,9 +743,6 @@ public class MenuMismaEscena : NetworkBehaviour
         {
             var toggle = boteObjeto.GetComponent<BoatDriverToggle>();
             if (toggle != null) toggle.ForceStopDriving();
-
-            //boteObjeto.transform.position = botePosInicial;
-            //boteObjeto.transform.rotation = boteRotInicial;
             
             var bc = boteObjeto.GetComponent<BoatController>();
             if (bc != null) bc.SnapTo(botePosInicial, boteRotInicial);
@@ -658,21 +756,33 @@ public class MenuMismaEscena : NetworkBehaviour
             }
         }
 
+        if (rodObjeto != null) rodObjeto.SetActive(true);
+
         GarantizarJugador();
         if (playerController != null)
         {
             CharacterController cc = playerController.GetComponent<CharacterController>();
+            
             if (cc != null) cc.enabled = false;
 
-            //playerController.transform.position = jugadorPosInicial;
-            //playerController.transform.rotation = jugadorRotInicial;
-            //if (cc != null) cc.enabled = true;
-            playerController.transform.SetPositionAndRotation(jugadorPosInicial, jugadorRotInicial);
+            playerController.transform.localPosition = new Vector3(0f, 5.0f, 0f);
+            playerController.transform.localRotation = Quaternion.identity;
+
             Physics.SyncTransforms();
 
-            playerController.enabled = false;
+            var netTransform = playerController.GetComponent<Unity.Netcode.Components.NetworkTransform>();
+            if (netTransform != null && netTransform.IsSpawned && (netTransform.IsServer || netTransform.IsOwner))
+            {
+                netTransform.Teleport(playerController.transform.position, playerController.transform.rotation, playerController.transform.localScale);
+            }
+
+            if (cc != null && ConfigJugador.RolActual == TipoJugador.Jugador1_PescadorVR) 
+            {
+                cc.enabled = true;
+            }
         }
     }
+
     private void ResaltarBotonLocal(int index)
     {
         if (activeButtons != null && index >= 0 && index < activeButtons.Length)
@@ -813,8 +923,8 @@ public class MenuMismaEscena : NetworkBehaviour
                 if (boteObjeto != null)
                 {
                     SetBoteVisible(true);
-                    var toggle = boteObjeto.GetComponent<BoatDriverToggle>();
-                    if (toggle != null) toggle.ActivarModoConduccionPermanente();
+                    //var toggle = boteObjeto.GetComponent<BoatDriverToggle>();
+                    //if (toggle != null) toggle.ActivarModoConduccionPermanente();
                 }
 
                 // Mismo jugador y mismo enable que EmpezarJuego (sin tocar el CharacterController)
