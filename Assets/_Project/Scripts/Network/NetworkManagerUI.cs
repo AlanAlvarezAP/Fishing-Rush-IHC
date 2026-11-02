@@ -19,8 +19,8 @@ public class NetworkManagerUI : MonoBehaviour
     [SerializeField] private GameObject uiContainer;
     [SerializeField] private GameObject hudContainer;
  
-    [Header("Configuración de Red")]
-    [SerializeField] private string pcIPAddress = "10.55.25.139";
+    [Header("Configuracion de Red")]
+    [SerializeField] private string pcIPAddress = "127.0.0.1";
     [SerializeField] private ushort port = 7777;
  
     private void Awake()

@@ -39,7 +39,7 @@ public class BoatController : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
-        isBeingDriven = false;
+        isBeingDriven = true;
         if (IsServer)
         {
             netBoatPos.Value = transform.position;
@@ -56,19 +56,19 @@ public class BoatController : NetworkBehaviour
     {
         var nm = NetworkManager.Singleton;
         bool offline = nm == null || !nm.IsListening;
-        bool hasAuthority = offline || nm.IsServer;
 
-        if (!hasAuthority && debugLogs && Time.frameCount % 120 == 0)
-            Debug.Log($"[BOTE-CLIENTE] spawned={IsSpawned} activo={gameObject.activeInHierarchy} netPos={netBoatPos.Value} pos={transform.position}");
- 
-        if (hasAuthority)
+        if (!IsServer && ConfigJugador.RolActual == TipoJugador.Jugador2_ConductorTablet)
         {
-            if (playerController == null) 
-                playerController = FindObjectOfType<ThirdPController>();
+            Vector2 inputTablet = ReadInput();
+            if (inputTablet.sqrMagnitude > 0.01f)
+            {
+                EnviarInputBoteServerRpc(inputTablet);
+            }
+        }
 
-            bool estaPescando = playerController != null && playerController.isFishing;
-
-            if (isBeingDriven && !estaPescando)
+        if (IsServer || offline)
+        {
+            if (isBeingDriven)
             {
                 ApplyMovement(ReadInput());
             }
@@ -79,6 +79,7 @@ public class BoatController : NetworkBehaviour
                 netBoatRot.Value = transform.rotation;
             }
         }
+
         else if (IsSpawned)
         {
             float t = Time.deltaTime * syncSmoothing;
@@ -89,24 +90,16 @@ public class BoatController : NetworkBehaviour
  
     private Vector2 ReadInput()
     {
-        float vertical = Input.GetAxis("Vertical");
-        float horizontal = Input.GetAxis("Horizontal");
- 
-#if UNITY_STANDALONE_WIN || UNITY_EDITOR
-        if (WiimoteManager.HasWiimote() && WiimoteManager.Wiimotes.Count > 0)
+        //float vertical = Input.GetAxis("Vertical");
+        //float horizontal = Input.GetAxis("Horizontal");
+
+        if (UIBoteInput.InputTactil.sqrMagnitude > 0.01f)
         {
-            Wiimote wiimote = WiimoteManager.Wiimotes[0];
- 
-            int ret;
-            do { ret = wiimote.ReadWiimoteData(); } while (ret > 0);
- 
-            if (wiimote.Button.d_up) vertical = 1f;
-            if (wiimote.Button.d_down) vertical = -1f;
-            if (wiimote.Button.d_left) horizontal = -1f;
-            if (wiimote.Button.d_right) horizontal = 1f;
+            return UIBoteInput.InputTactil.normalized;
         }
-#endif
-        return new Vector2(horizontal, vertical);
+ 
+        //return new Vector2(horizontal, vertical);
+        return Vector2.zero;
     }
  
     private void ApplyMovement(Vector2 input)
@@ -126,5 +119,11 @@ public class BoatController : NetworkBehaviour
     {
         transform.SetPositionAndRotation(pos, rot);
         if (IsServer && IsSpawned) { netBoatPos.Value = pos; netBoatRot.Value = rot; }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void EnviarInputBoteServerRpc(Vector2 input)
+    {
+        ApplyMovement(input);
     }
 }
