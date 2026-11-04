@@ -1,12 +1,15 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
 
-#if UNITY_STANDALONE_WIN || UNITY_EDITOR
-using WiimoteApi;
-#endif
-
+/// <summary>
+/// Movimiento del bote.
+/// - Celular conductor (Jugador 2, cliente): lee los botones tactiles (UIBoteInput) y manda el input
+///   al servidor SOLO cuando cambia (incluido el soltar = Vector2.zero).
+/// - PC (servidor): guarda el ultimo input recibido y lo aplica en su propio Update con su deltaTime,
+///   asi la velocidad no depende de los FPS del celular. Publica posicion/rotacion por NetworkVariables.
+/// - Resto de clientes (celular VR): solo interpolan hacia la posicion de red.
+/// El movimiento solo esta habilitado durante la partida (lo controla MenuMismaEscena).
+/// </summary>
 public class BoatController : NetworkBehaviour
 {
     [Header("Ajustes de Movimiento")]
@@ -14,32 +17,31 @@ public class BoatController : NetworkBehaviour
     [SerializeField] private float turnSpeed = 40.0f;
     [SerializeField] private float syncSmoothing = 15f;
 
-    [Header("Debug")]
-    [SerializeField] private bool debugLogs = true;
+    private bool movimientoHabilitado = false;
 
-    private bool isBeingDriven = false;
-    private ThirdPController playerController;
+    // Servidor: ultimo input recibido del conductor
+    private Vector2 inputRemoto = Vector2.zero;
+
+    // Cliente conductor: ultimo input enviado (para mandar solo cuando cambia)
+    private Vector2 ultimoInputEnviado = Vector2.zero;
 
     private NetworkVariable<Vector3> netBoatPos = new NetworkVariable<Vector3>(
         Vector3.zero, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     );
-    //private NetworkVariable<Vector3> netBoatPos = new NetworkVariable<Vector3>(
-    //    new Vector3(0f, -2.25f, 0.25f), NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
-    //);
     private NetworkVariable<Quaternion> netBoatRot = new NetworkVariable<Quaternion>(
         Quaternion.identity, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     );
 
-    public void SetDrivingState(bool driving)
+    /// <summary>Habilita o bloquea el movimiento del bote (menu / partida).</summary>
+    public void SetMovimientoHabilitado(bool habilitado)
     {
-        isBeingDriven = driving;
-        if (debugLogs) Debug.Log("[BOTE] BoatController.SetDrivingState(" + driving + ")");
+        movimientoHabilitado = habilitado;
+        if (!habilitado) inputRemoto = Vector2.zero;
     }
 
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
-        isBeingDriven = true;
         if (IsServer)
         {
             netBoatPos.Value = transform.position;
@@ -57,20 +59,24 @@ public class BoatController : NetworkBehaviour
         var nm = NetworkManager.Singleton;
         bool offline = nm == null || !nm.IsListening;
 
-        if (!IsServer && ConfigJugador.RolActual == TipoJugador.Jugador2_ConductorTablet)
+        // Celular conductor: envia su input al servidor cuando cambia
+        if (!offline && !IsServer && IsSpawned && ConfigJugador.RolActual == TipoJugador.Jugador2_ConductorTablet)
         {
             Vector2 inputTablet = ReadInput();
-            if (inputTablet.sqrMagnitude > 0.01f)
+            if ((inputTablet - ultimoInputEnviado).sqrMagnitude > 0.0001f)
             {
+                ultimoInputEnviado = inputTablet;
                 EnviarInputBoteServerRpc(inputTablet);
             }
         }
 
         if (IsServer || offline)
         {
-            if (isBeingDriven)
+            if (movimientoHabilitado)
             {
-                ApplyMovement(ReadInput());
+                // Input del conductor remoto; sin red (pruebas) se usa el tactil local
+                Vector2 input = inputRemoto.sqrMagnitude > 0.0001f ? inputRemoto : ReadInput();
+                ApplyMovement(input);
             }
 
             if (!offline && IsSpawned)
@@ -79,7 +85,6 @@ public class BoatController : NetworkBehaviour
                 netBoatRot.Value = transform.rotation;
             }
         }
-
         else if (IsSpawned)
         {
             float t = Time.deltaTime * syncSmoothing;
@@ -87,28 +92,23 @@ public class BoatController : NetworkBehaviour
             transform.rotation = Quaternion.Slerp(transform.rotation, netBoatRot.Value, t);
         }
     }
- 
+
     private Vector2 ReadInput()
     {
-        //float vertical = Input.GetAxis("Vertical");
-        //float horizontal = Input.GetAxis("Horizontal");
-
         if (UIBoteInput.InputTactil.sqrMagnitude > 0.01f)
         {
             return UIBoteInput.InputTactil.normalized;
         }
- 
-        //return new Vector2(horizontal, vertical);
         return Vector2.zero;
     }
- 
+
     private void ApplyMovement(Vector2 input)
     {
         if (Mathf.Abs(input.y) > 0.1f)
         {
             transform.position += transform.forward * input.y * moveSpeed * Time.deltaTime;
         }
- 
+
         if (Mathf.Abs(input.x) > 0.1f)
         {
             transform.Rotate(Vector3.up, input.x * turnSpeed * Time.deltaTime);
@@ -117,13 +117,14 @@ public class BoatController : NetworkBehaviour
 
     public void SnapTo(Vector3 pos, Quaternion rot)
     {
+        inputRemoto = Vector2.zero;
         transform.SetPositionAndRotation(pos, rot);
         if (IsServer && IsSpawned) { netBoatPos.Value = pos; netBoatRot.Value = rot; }
     }
 
     [ServerRpc(RequireOwnership = false)]
-    public void EnviarInputBoteServerRpc(Vector2 input)
+    private void EnviarInputBoteServerRpc(Vector2 input)
     {
-        ApplyMovement(input);
+        inputRemoto = Vector2.ClampMagnitude(input, 1f);
     }
 }

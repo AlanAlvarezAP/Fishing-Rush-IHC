@@ -178,11 +178,6 @@ public class ThirdPController : NetworkBehaviour
         return isFishing && alreadyCast && !isReeling && !isCastingInProcess;
     }
 
-    void Awake()
-    {
-        Debug.Log("[DIAGNOSTICO] ThirdPController inicializado en el objeto: " + gameObject.name);
-    }
-
     void Start()
     {
         controller = GetComponent<CharacterController>();
@@ -219,14 +214,6 @@ public class ThirdPController : NetworkBehaviour
         }
     }
 
-    public override void OnNetworkSpawn()
-    {
-        if (IsOwner)
-        {
-            // El control del cursor ahora lo gestiona exclusivamente el Menú Principal al arrancar.
-        }
-    }
-
     void Update()
     {
         //Debug.Log($"[UPDATE RUNNING] scriptEnabled={enabled} | isFishing={isFishing}");
@@ -236,21 +223,7 @@ public class ThirdPController : NetworkBehaviour
         bool tieneControl = offline || IsOwner || IsServer;
 
         if (!tieneControl) return;
-        /*
-        if (Input.GetKeyDown(KeyCode.Escape))
-        {
-            if (Cursor.lockState == CursorLockMode.Locked)
-            {
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
-            }
-            else
-            {
-                Cursor.lockState = CursorLockMode.Locked;
-                Cursor.visible = false;
-            }
-        }
-        */
+
         if (!isFishing) debugState = "No pescando";
         else if (isCastingInProcess) debugState = "Cargando tiro...";
         else if (isReeling) debugState = "Recogiendo...";
@@ -1137,26 +1110,59 @@ public class ThirdPController : NetworkBehaviour
         }
     }
 
+    // ---------------------------------------------------------------
+    // SFX: la logica de pesca/minijuego solo corre en la PC (servidor).
+    // Cada sonido se reproduce local y se reenvia a los celulares por ClientRpc.
+    // ---------------------------------------------------------------
+    private enum SfxId : byte
+    {
+        Lanzamiento = 0,
+        AciertoPatron = 1,
+        FalloPatron = 2,
+        HazPatron = 3,
+        VictoriaMinijuego = 4,
+        DerrotaMinijuego = 5
+    }
+
+    private void ReproducirSfx(SfxId id)
+    {
+        ReproducirSfxLocal(id);
+        if (IsSpawned && IsServer) ReproducirSfxClientRpc((byte)id);
+    }
+
+    [ClientRpc]
+    private void ReproducirSfxClientRpc(byte id)
+    {
+        if (IsServer) return; // la PC ya lo reprodujo
+        ReproducirSfxLocal((SfxId)id);
+    }
+
+    private void ReproducirSfxLocal(SfxId id)
+    {
+        if (sfxSource == null) return;
+
+        AudioClip clip = null;
+        switch (id)
+        {
+            case SfxId.Lanzamiento: clip = sfxLanzamiento; break;
+            case SfxId.AciertoPatron: clip = sfxAciertoPatron; break;
+            case SfxId.FalloPatron: clip = sfxFalloPatron; break;
+            case SfxId.HazPatron: clip = sfxHazPatron; break;
+            case SfxId.VictoriaMinijuego: clip = sfxVictoriaMinijuego; break;
+            case SfxId.DerrotaMinijuego: clip = sfxDerrotaMinijuego; break;
+        }
+
+        if (clip != null) sfxSource.PlayOneShot(clip, 1.0f);
+    }
+
     public void ReproducirSonidoLanzamiento()
     {
-        if (sfxSource != null && sfxLanzamiento != null)
-        {
-            sfxSource.PlayOneShot(sfxLanzamiento, 1.0f);
-        }
+        ReproducirSfx(SfxId.Lanzamiento);
     }
 
     public void ReproducirResultadoPatron(bool exito)
     {
-        if (sfxSource == null) return;
-
-        if (exito && sfxAciertoPatron != null)
-        {
-            sfxSource.PlayOneShot(sfxAciertoPatron, 1.0f);
-        }
-        else if (!exito && sfxFalloPatron != null)
-        {
-            sfxSource.PlayOneShot(sfxFalloPatron, 1.0f);
-        }
+        ReproducirSfx(exito ? SfxId.AciertoPatron : SfxId.FalloPatron);
     }
 
     [ServerRpc(RequireOwnership = false)]
@@ -1169,42 +1175,19 @@ public class ThirdPController : NetworkBehaviour
 
     public void ReproducirInicioPatron()
     {
-        if (sfxSource != null && sfxHazPatron != null)
-        {
-            sfxSource.PlayOneShot(sfxHazPatron, 1.0f);
-        }
-
+        ReproducirSfx(SfxId.HazPatron);
     }
 
     public void ReproducirResultadoMinijuego(bool victoria)
     {
-        if (victoria)
-        {
-            // 1. Audio Victoria
-            if (sfxSource != null && sfxVictoriaMinijuego != null)
-            {
-                sfxSource.PlayOneShot(sfxVictoriaMinijuego, 1.0f);
-            }
+        // 1. Audio (local + celulares)
+        ReproducirSfx(victoria ? SfxId.VictoriaMinijuego : SfxId.DerrotaMinijuego);
 
-            // 2. Anuncio Victoria en Pantalla
-            if (AnunciosUI.Instance != null)
-            {
-                AnunciosUI.Instance.MostrarVictoria();
-            }
-        }
-        else
+        // 2. Anuncio en pantalla (AnunciosUI ya lo reenvia a los celulares)
+        if (AnunciosUI.Instance != null)
         {
-            // 1. Audio Derrota
-            if (sfxSource != null && sfxDerrotaMinijuego != null)
-            {
-                sfxSource.PlayOneShot(sfxDerrotaMinijuego, 1.0f);
-            }
-
-            // 2. Anuncio Derrota en Pantalla
-            if (AnunciosUI.Instance != null)
-            {
-                AnunciosUI.Instance.MostrarDerrota();
-            }
+            if (victoria) AnunciosUI.Instance.MostrarVictoria();
+            else AnunciosUI.Instance.MostrarDerrota();
         }
     }
 }

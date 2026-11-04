@@ -16,6 +16,14 @@ public class CardboardStartup : MonoBehaviour
         Screen.sleepTimeout = SleepTimeout.NeverSleep;
         Screen.brightness = 1.0f;
 
+        // El celular conductor tambien es Android, pero NO usa VR: se apaga el XR (sin pantalla dividida)
+        if (ConfigJugador.RolActual == TipoJugador.Jugador2_ConductorTablet)
+        {
+            ApagarXR();
+            enabled = false;
+            return;
+        }
+
         if (!Api.HasDeviceParams())
         {
             Api.ScanDeviceParams();
@@ -23,6 +31,18 @@ public class CardboardStartup : MonoBehaviour
 
         readyToRun = true;
 #endif
+    }
+
+    private void ApagarXR()
+    {
+        var settings = UnityEngine.XR.Management.XRGeneralSettings.Instance;
+        if (settings == null || settings.Manager == null) return;
+
+        if (settings.Manager.isInitializationComplete)
+        {
+            settings.Manager.StopSubsystems();
+            settings.Manager.DeinitializeLoader();
+        }
     }
 
     public void Update()

@@ -394,8 +394,6 @@ public class FishCube : NetworkBehaviour
             fishMotion.SetReachMode(FishAlive.ReachMode.Position);
         }
 
-        FishMinigameUI ui = GetMinigameUI();
-
         for (int i = 0; i < totalTurns; i++)
         {
             if (playerController == null || !playerController.isFishing)
@@ -434,11 +432,8 @@ public class FishCube : NetworkBehaviour
 
                 if (showDebug) Debug.LogWarning($"¡Capturar el pez!\nPatrón: {expectedGesture}");
 
-                if (ui != null)
-                {
-                    ui.ShowDirection((int)expectedGesture);
-                    ui.UpdatePatternText(expectedGesture, i + 1, totalTurns);
-                }
+                MostrarMinigameUI(MinigameUIAccion.Direccion, (int)expectedGesture);
+                MostrarMinigameUI(MinigameUIAccion.Patron, (int)expectedGesture, i + 1, totalTurns);
             }
 
             bool matchedThisTurn = false;
@@ -478,14 +473,14 @@ public class FishCube : NetworkBehaviour
             {
                 successfulFollows++;
                 if (showDebug) Debug.Log($"--> ¡ÉXITO! Gesto correcto.");
-                if (ui != null) ui.ShowFeedback(true);
+                MostrarMinigameUI(MinigameUIAccion.Feedback, 1);
 
                 if (playerController != null) playerController.ReproducirResultadoPatron(true);
             }
             else
             {
                 if (showDebug) Debug.Log($"--> FALLO: El tiempo se agotó.");
-                if (ui != null) ui.ShowFeedback(false);
+                MostrarMinigameUI(MinigameUIAccion.Feedback, 0);
 
                 if (playerController != null) playerController.ReproducirResultadoPatron(false);
             }
@@ -517,10 +512,7 @@ public class FishCube : NetworkBehaviour
             playerController.ReproducirResultadoMinijuego(isVictory);
         }
 
-        if (ui != null)
-        {
-            ui.ShowFinalResult(isVictory);
-        }
+        MostrarMinigameUI(MinigameUIAccion.Final, isVictory ? 1 : 0);
 
         if (isVictory)
         {
@@ -538,6 +530,59 @@ public class FishCube : NetworkBehaviour
             }
 
             EscapeAndDespawn();
+        }
+    }
+
+    // ---------------- UI DEL MINIJUEGO: PC (servidor) -> celulares ----------------
+    // El minijuego solo corre en la PC; la UI del pez se pinta local y se reenvia por el
+    // propio pez (es un NetworkObject spawneado, asi que su ClientRpc llega a los celulares).
+    private enum MinigameUIAccion : byte
+    {
+        Direccion = 0,  // a = gesto (direccion de la flecha)
+        Patron = 1,     // a = gesto, b = ronda actual, c = rondas totales
+        Feedback = 2,   // a = 1 acierto / 0 fallo
+        Final = 3       // a = 1 atrapado / 0 escapo
+    }
+
+    private void MostrarMinigameUI(MinigameUIAccion accion, int a, int b = 0, int c = 0)
+    {
+        AplicarMinigameUILocal(accion, a, b, c);
+        if (IsSpawned && IsServer) MinigameUIClientRpc((byte)accion, a, b, c);
+    }
+
+    [ClientRpc]
+    private void MinigameUIClientRpc(byte accion, int a, int b, int c)
+    {
+        if (IsServer) return; // la PC ya lo mostro localmente
+        AplicarMinigameUILocal((MinigameUIAccion)accion, a, b, c);
+    }
+
+    private void AplicarMinigameUILocal(MinigameUIAccion accion, int a, int b, int c)
+    {
+        FishMinigameUI ui = GetMinigameUI();
+        if (ui == null) return;
+
+        try
+        {
+            switch (accion)
+            {
+                case MinigameUIAccion.Direccion:
+                    ui.ShowDirection(a);
+                    break;
+                case MinigameUIAccion.Patron:
+                    ui.UpdatePatternText((FishingGesture)a, b, c);
+                    break;
+                case MinigameUIAccion.Feedback:
+                    ui.ShowFeedback(a == 1);
+                    break;
+                case MinigameUIAccion.Final:
+                    ui.ShowFinalResult(a == 1);
+                    break;
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[MINIJUEGO][UI] Error aplicando " + accion + ": " + e.Message);
         }
     }
 
