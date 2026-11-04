@@ -355,11 +355,7 @@ public class TutorialSlidesUI : NetworkBehaviour
     {
         try
         {
-            if (boteObjeto != null)
-            {
-                var toggle = boteObjeto.GetComponent<BoatDriverToggle>();
-                if (toggle != null) toggle.DesactivarConduccionMenu();
-            }
+            SetMovimientoBote(false);
 
             if (playerController != null)
             {
@@ -378,12 +374,8 @@ public class TutorialSlidesUI : NetworkBehaviour
 
     private void PrepararEscenaPruebaSinMenu()
     {
-        if (boteObjeto != null)
-        {
-            boteObjeto.SetActive(true);
-            var toggle = boteObjeto.GetComponent<BoatDriverToggle>();
-            if (toggle != null) toggle.ActivarModoConduccionPermanente();
-        }
+        if (boteObjeto != null) boteObjeto.SetActive(true);
+        SetMovimientoBote(true);
 
         if (playerController != null)
         {
@@ -391,6 +383,13 @@ public class TutorialSlidesUI : NetworkBehaviour
             if (cc != null) cc.enabled = true;
             playerController.enabled = true;
         }
+    }
+
+    private void SetMovimientoBote(bool habilitado)
+    {
+        if (boteObjeto == null) return;
+        BoatController bc = boteObjeto.GetComponent<BoatController>();
+        if (bc != null) bc.SetMovimientoHabilitado(habilitado);
     }
 
     private void IniciarPruebaMovimiento()

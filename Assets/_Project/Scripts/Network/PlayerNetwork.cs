@@ -1,8 +1,14 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
 
+/// <summary>
+/// Camaras y visibilidad del cuerpo del pescador segun el dispositivo:
+/// - PC (servidor): CameraSwitcher habilitado (tercera persona por defecto).
+/// - Celular VR (Jugador 1, cliente): primera persona y cuerpo oculto.
+/// - Celular conductor (Jugador 2, cliente): no toca las camaras del pescador ni oculta su cuerpo
+///   (el conductor ve al pescador desde camaraBoteTablet; eso lo configura MenuMismaEscena).
+/// El giro en Y del celular VR lo envia ThirdPController (TransmitirYawServerRpc).
+/// </summary>
 public class PlayerNetwork : NetworkBehaviour
 {
     [Header("Camaras del Personaje")]
@@ -11,8 +17,6 @@ public class PlayerNetwork : NetworkBehaviour
 
     [Header("Referencias Visuales del Personaje")]
     [SerializeField] private SkinnedMeshRenderer[] characterMeshRenderers;
-
-    public float ClientCameraYaw { get; private set; } = 0f;
 
     public override void OnNetworkSpawn()
     {
@@ -30,9 +34,15 @@ public class PlayerNetwork : NetworkBehaviour
         {
             if (switcher != null) switcher.enabled = false;
 
+            if (ConfigJugador.RolActual == TipoJugador.Jugador2_ConductorTablet)
+            {
+                // Conductor: el pescador se ve completo desde la camara del bote
+                return;
+            }
+
             if (thirdPersonCamera != null) thirdPersonCamera.SetActive(false);
 
-            if (firstPersonCamera != null) 
+            if (firstPersonCamera != null)
             {
                 firstPersonCamera.tag = "MainCamera";
                 firstPersonCamera.SetActive(true);
@@ -56,44 +66,6 @@ public class PlayerNetwork : NetworkBehaviour
                 switcher.SetCameraMode(false);
             }
         }
-
-        /*
-        if (!IsOwner)
-        {
-            AudioListener fpListener = firstPersonCamera.GetComponent<AudioListener>();
-            AudioListener tpListener = thirdPersonCamera.GetComponent<AudioListener>();
-            if (fpListener != null) fpListener.enabled = false;
-            if (tpListener != null) tpListener.enabled = false;
-
-            if (firstPersonCamera != null) firstPersonCamera.SetActive(false);
-            if (thirdPersonCamera != null) thirdPersonCamera.SetActive(false);
-            if (switcher != null) switcher.enabled = false;
-            return;
-        }
-        */
-    }
-
-    private void Update()
-    {
-        if (IsClient && !IsHost)
-        {
-            SendHeadRotationToServer();
-        }
-    }
-
-    private void SendHeadRotationToServer()
-    {
-        if (firstPersonCamera != null && firstPersonCamera.activeInHierarchy)
-        {
-            float currentYaw = firstPersonCamera.transform.eulerAngles.y;
-            UpdateHeadRotationServerRpc(currentYaw);
-        }
-    }
-
-    [ServerRpc(RequireOwnership = false)]
-    private void UpdateHeadRotationServerRpc(float cameraYaw)
-    {
-        ClientCameraYaw = cameraYaw;
     }
 
     private void HideBodyOnClient()

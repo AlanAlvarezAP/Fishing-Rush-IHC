@@ -651,7 +651,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 22400762, guid: 67117722a812a2e46ab8cb8eafbf5f5e, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -0.00002670288
+      value: 0.000015258789
       objectReference: {fileID: 0}
     - target: {fileID: 22426080, guid: 67117722a812a2e46ab8cb8eafbf5f5e, type: 3}
       propertyPath: m_AnchorMax.x
@@ -14647,7 +14647,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1217885421
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -15786,7 +15786,6 @@ GameObject:
   - component: {fileID: 1294114534}
   - component: {fileID: 1294114535}
   - component: {fileID: 1294114533}
-  - component: {fileID: 1294114532}
   m_Layer: 0
   m_Name: Boat
   m_TagString: Untagged
@@ -15794,23 +15793,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1294114532
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1294114531}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0e4a461f649f0724380b8b0b4e539df0, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  timonAnchor: {fileID: 1618682680}
-  deckAnchor: {fileID: 411383305}
-  toggleKey: 102
-  playerController: {fileID: 8523933818799061779}
-  playerObject: {fileID: 8523933818799061776}
 --- !u!114 &1294114533
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -15826,7 +15808,6 @@ MonoBehaviour:
   moveSpeed: 8
   turnSpeed: 40
   syncSmoothing: 15
-  debugLogs: 1
 --- !u!4 &1294114534
 Transform:
   m_ObjectHideFlags: 0
@@ -22203,7 +22184,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4f3ab6e559c087149ad253855f21ede2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  panelControlesBote: {fileID: 1217885420}
+  canvasControlesBote: {fileID: 1217885420}
   camaraBoteTablet: {fileID: 2118392344}
   canvasMenu: {fileID: 523132400}
   canvasGameHUD: {fileID: 423686160}
@@ -23149,11 +23130,11 @@ GameObject:
   - component: {fileID: 2118392346}
   m_Layer: 0
   m_Name: BoatCamera
-  m_TagString: Untagged
+  m_TagString: MainCamera
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &2118392345
 Transform:
   m_ObjectHideFlags: 0

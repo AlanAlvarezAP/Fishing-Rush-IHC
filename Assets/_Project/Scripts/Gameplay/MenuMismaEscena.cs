@@ -22,7 +22,7 @@ public class MenuMismaEscena : NetworkBehaviour
     }
 
     [Header("UI Controles Conductor Tablet")]
-    public GameObject panelControlesBote;
+    public GameObject canvasControlesBote;
 
     [Header("Cámara Bote (Jugador 2 - Tablet)")]
     public GameObject camaraBoteTablet;
@@ -100,8 +100,28 @@ public class MenuMismaEscena : NetworkBehaviour
         false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     );
 
+    // Estado del pescador. Lo calcula la PC (servidor), que es donde corre la logica real
+    // del pescador, y los celulares solo lo muestran.
+    // Se usa un enum (byte) y NO un FixedString: en Netcode 1.9.1 el FixedString lanza
+    // NullReferenceException al serializar el delta, y esa excepcion corta el envio de las
+    // demas NetworkVariables del tick (ej. netIsFishing del ThirdPController).
+    public enum EstadoJugador : byte
+    {
+        Caminando = 0,
+        Preparado = 1,
+        Pescando = 2,
+        Recogiendo = 3
+    }
+
+    private NetworkVariable<EstadoJugador> estadoJugadorNet = new NetworkVariable<EstadoJugador>(
+        EstadoJugador.Caminando, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+
     public override void OnNetworkSpawn()
     {
+        estadoJugadorNet.OnValueChanged += (oldVal, newVal) => AplicarTextoEstado(TextoEstado(newVal));
+        AplicarTextoEstado(TextoEstado(estadoJugadorNet.Value));
+
         selectedButtonIndexNet.OnValueChanged += (oldVal, newVal) =>
         {
             selectedButtonIndex = newVal;
@@ -129,6 +149,9 @@ public class MenuMismaEscena : NetworkBehaviour
         {
             OcultarMenuYEmpezarLocal();
         }
+
+        // PlayerNetwork tambien toca las camaras al spawnear: se reaplica el rol de esta build
+        ConfigurarCamarasPorRol();
     }
 
     void Awake()
@@ -145,6 +168,9 @@ public class MenuMismaEscena : NetworkBehaviour
         if (canvasGameOver != null) canvasGameOver.SetActive(false);
         if (panelWiimote != null) panelWiimote.SetActive(false);
         if (panelTutorial != null) panelTutorial.SetActive(false);
+
+        // Controles del bote apagados por defecto; solo se encienden para el conductor al empezar
+        SetControlesBoteActivos(false);
 
         if (canvasMenu != null) canvasMenu.SetActive(true);
         if (panelMenuPrincipal != null) panelMenuPrincipal.SetActive(true);
@@ -182,11 +208,6 @@ public class MenuMismaEscena : NetworkBehaviour
     void Update()
     {
         ActualizarTextoEstadoHUD();
-        if (Input.GetKeyDown(KeyCode.T))
-        {
-            tutorialCompletado = !tutorialCompletado;
-            MostrarMenuLocal();
-        }
 
         if (Input.GetKeyDown(KeyCode.Escape))
         {
@@ -323,11 +344,8 @@ public class MenuMismaEscena : NetworkBehaviour
 
         ResetearPosicionesOriginales();
 
-        if (panelControlesBote != null)
-        {
-            bool esConductor = ConfigJugador.RolActual == TipoJugador.Jugador2_ConductorTablet;
-            panelControlesBote.SetActive(esConductor);
-        }
+        // Solo el Jugador 2 (conductor) ve los controles del bote
+        SetControlesBoteActivos(EsConductor());
 
         if (FishingCounterManager.Instance != null)
         {
@@ -342,8 +360,7 @@ public class MenuMismaEscena : NetworkBehaviour
         if (boteObjeto != null)
         {
             SetBoteVisible(true);
-            var bc = boteObjeto.GetComponent<BoatController>();
-            if (bc != null) bc.SetDrivingState(true);
+            SetMovimientoBote(true);
 
             GarantizarJugador();
             if (playerController != null) playerController.enabled = true;
@@ -365,40 +382,22 @@ public class MenuMismaEscena : NetworkBehaviour
             }
         }
 
-        // --- ACTIVACIÓN Y CONFIGURACIÓN DE CÁMARAS SEGÚN ROL ---
-        GarantizarJugador();
+        // --- CÁMARAS SEGÚN ROL ---
+        ConfigurarCamarasPorRol();
 
-        // Buscamos el componente Camera interno del personaje VR
-        Camera vrCamComponent = null;
-        if (playerController != null)
+        if (EsConductor())
         {
-            vrCamComponent = playerController.GetComponentInChildren<Camera>(true);
-        }
-
-        if (ConfigJugador.RolActual == TipoJugador.Jugador2_ConductorTablet)
-        {
-            if (playerController != null) playerController.enabled = false;
-            if (vrCamComponent != null) vrCamComponent.gameObject.SetActive(false);
-            if (camaraBoteTablet != null) 
-            {
-                camaraBoteTablet.SetActive(true);
-                Camera camBote = camaraBoteTablet.GetComponent<Camera>();
-                if (camBote != null) camBote.enabled = true;
-            }
-
+            // El ThirdPController se deja habilitado: en el celular su Update no hace nada
+            // (no es dueño ni servidor), pero su LateUpdate es el que refleja la caña, el
+            // anzuelo y el giro del pescador. Si se apaga, el conductor ve al pescador congelado.
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
         }
-        else // Jugador1_PescadorVR
+        else // Jugador1_PescadorVR (PC y celular VR)
         {
-            // 1. Apagar cámara del bote
-            if (camaraBoteTablet != null) camaraBoteTablet.SetActive(false);
-
             if (playerController != null)
             {
                 playerController.enabled = true;
-                
-                if (vrCamComponent != null) vrCamComponent.gameObject.SetActive(true);
 
                 CharacterController cc = playerController.GetComponent<CharacterController>();
                 if (cc != null) cc.enabled = true;
@@ -688,15 +687,79 @@ public class MenuMismaEscena : NetworkBehaviour
         }
     }
 
+    private static bool EsConductor()
+    {
+        return ConfigJugador.RolActual == TipoJugador.Jugador2_ConductorTablet;
+    }
+
+    private void SetControlesBoteActivos(bool activos)
+    {
+        // Nunca se muestran en la build del pescador (PC / celular VR)
+        if (canvasControlesBote != null) canvasControlesBote.SetActive(activos && EsConductor());
+    }
+
+    private void SetMovimientoBote(bool habilitado)
+    {
+        if (boteObjeto == null) return;
+        var bc = boteObjeto.GetComponent<BoatController>();
+        if (bc != null) bc.SetMovimientoHabilitado(habilitado);
+    }
+
+    /// <summary>
+    /// Camaras segun el rol de esta build (se llama al iniciar, al spawnear en red y al empezar):
+    /// - Jugador 2 (conductor): SIEMPRE ve por camaraBoteTablet (menu, partida y game over).
+    ///   Las camaras del pescador se apagan (solo el componente Camera, no su GameObject,
+    ///   por si la caña u otros objetos cuelgan de ellas).
+    /// - Jugador 1 (PC y celular VR): camaraBoteTablet SIEMPRE apagada; las camaras del
+    ///   pescador las maneja PlayerNetwork / Cardboard.
+    /// </summary>
+    private void ConfigurarCamarasPorRol()
+    {
+        bool conductor = EsConductor();
+
+        Camera camBote = null;
+        if (camaraBoteTablet != null)
+        {
+            camaraBoteTablet.SetActive(conductor);
+            camBote = camaraBoteTablet.GetComponent<Camera>();
+            if (camBote != null)
+            {
+                camBote.enabled = conductor;
+                // Nunca en pantalla dividida (por si el XR de Cardboard sigue activo en el celular)
+                if (conductor) camBote.stereoTargetEye = StereoTargetEyeMask.None;
+            }
+        }
+
+        if (!conductor) return;
+
+        GarantizarJugador();
+        if (playerController == null) return;
+
+        AudioListener listenerBote = camaraBoteTablet != null ? camaraBoteTablet.GetComponent<AudioListener>() : null;
+
+        foreach (Camera cam in playerController.GetComponentsInChildren<Camera>(true))
+        {
+            if (cam == camBote) continue;
+            cam.enabled = false;
+
+            // Solo se apaga el listener del pescador si la camara del bote tiene uno propio
+            if (listenerBote != null)
+            {
+                AudioListener al = cam.GetComponent<AudioListener>();
+                if (al != null) al.enabled = false;
+            }
+        }
+    }
+
     private void ApagarJugador()
     {
-        if (camaraBoteTablet != null) camaraBoteTablet.SetActive(false);
+        SetControlesBoteActivos(false);
+        ConfigurarCamarasPorRol();
 
         if (boteObjeto != null)
         {
             SetBoteVisible(false);
-            var toggle = boteObjeto.GetComponent<BoatDriverToggle>();
-            if (toggle != null) toggle.DesactivarConduccionMenu();
+            SetMovimientoBote(false);
         }
         ResetearPosicionesOriginales();
         if (rodObjeto != null) rodObjeto.SetActive(false);
@@ -741,9 +804,9 @@ public class MenuMismaEscena : NetworkBehaviour
 
         if (boteObjeto != null)
         {
-            var toggle = boteObjeto.GetComponent<BoatDriverToggle>();
-            if (toggle != null) toggle.ForceStopDriving();
-            
+            // El bote queda quieto hasta que la partida lo habilite de nuevo
+            SetMovimientoBote(false);
+
             var bc = boteObjeto.GetComponent<BoatController>();
             if (bc != null) bc.SnapTo(botePosInicial, boteRotInicial);
             else { boteObjeto.transform.position = botePosInicial; boteObjeto.transform.rotation = boteRotInicial; }
@@ -868,6 +931,55 @@ public class MenuMismaEscena : NetworkBehaviour
         }
     }
 
+    // =====================================================================
+    // ANUNCIOS (gesto requerido / victoria / derrota): relay PC -> celulares
+    // AnunciosUI es un MonoBehaviour y solo lo llama la logica del minijuego (PC).
+    // =====================================================================
+    public enum AnuncioAccion
+    {
+        Gesto = 0,
+        Victoria = 1,
+        Derrota = 2
+    }
+
+    public void EnviarAnuncioAlVisor(AnuncioAccion accion, int gesto, float duracion)
+    {
+        if (!IsSpawned || !IsServer) return;
+        AnuncioClientRpc((int)accion, gesto, duracion);
+    }
+
+    [ClientRpc]
+    private void AnuncioClientRpc(int accion, int gesto, float duracion)
+    {
+        if (IsServer) return; // la PC ya lo mostro localmente
+
+        try
+        {
+            AsegurarHUDActivoVisor();
+
+            AnunciosUI anuncios = AnunciosUI.Instance;
+            if (anuncios == null) anuncios = FindObjectOfType<AnunciosUI>(true);
+            if (anuncios == null) return;
+
+            switch ((AnuncioAccion)accion)
+            {
+                case AnuncioAccion.Gesto:
+                    anuncios.MostrarGestoRequeridoLocal((FishCube.FishingGesture)gesto, duracion);
+                    break;
+                case AnuncioAccion.Victoria:
+                    anuncios.MostrarVictoriaLocal();
+                    break;
+                case AnuncioAccion.Derrota:
+                    anuncios.MostrarDerrotaLocal();
+                    break;
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[ANUNCIOS][VISOR] Error aplicando anuncio " + accion + ": " + e.Message);
+        }
+    }
+
     private void AsegurarHUDActivoVisor()
     {
         if (canvasGameHUD == null) return;
@@ -920,12 +1032,7 @@ public class MenuMismaEscena : NetworkBehaviour
 
             if (enPrueba)
             {
-                if (boteObjeto != null)
-                {
-                    SetBoteVisible(true);
-                    //var toggle = boteObjeto.GetComponent<BoatDriverToggle>();
-                    //if (toggle != null) toggle.ActivarModoConduccionPermanente();
-                }
+                if (boteObjeto != null) SetBoteVisible(true);
 
                 // Mismo jugador y mismo enable que EmpezarJuego (sin tocar el CharacterController)
                 GarantizarJugador();
@@ -1000,33 +1107,53 @@ public class MenuMismaEscena : NetworkBehaviour
 
     private void ActualizarTextoEstadoHUD()
     {
-        if (txtEstadoJugador == null || canvasGameHUD == null || !canvasGameHUD.activeInHierarchy) return;
-
-        // 1. Detecci�n directa del Bote (eval�a primero, sin depender del Inspector ni del jugador activo)
-        BoatDriverToggle boatToggle = FindObjectOfType<BoatDriverToggle>();
-        if (boatToggle != null && boatToggle.IsDriving)
+        // Cliente (celular VR / conductor): solo refleja lo que manda la PC
+        if (IsSpawned && !IsServer)
         {
-            txtEstadoJugador.text = "En el bote";
+            AplicarTextoEstado(TextoEstado(estadoJugadorNet.Value));
             return;
         }
 
-        // 2. Si no est� en el bote, busca al personaje para revisar estados de pesca / caminata
+        // Servidor (PC) o sin red: calcula el estado
+        if (canvasGameHUD == null || !canvasGameHUD.activeInHierarchy) return;
+
         ThirdPController jugadorActual = ObtenerJugadorLocalReal();
         if (jugadorActual == null) return;
 
-        if (jugadorActual.isFishing)
+        EstadoJugador estado = CalcularEstadoJugador(jugadorActual);
+        AplicarTextoEstado(TextoEstado(estado));
+
+        if (IsSpawned && IsServer && estadoJugadorNet.Value != estado)
         {
-            if (jugadorActual.alreadyCast)
-                txtEstadoJugador.text = "Pescando";
-            else if (jugadorActual.isReeling)
-                txtEstadoJugador.text = "Recogiendo...";
-            else
-                txtEstadoJugador.text = "Preparado";
+            estadoJugadorNet.Value = estado;
         }
-        else
+    }
+
+    private EstadoJugador CalcularEstadoJugador(ThirdPController jugador)
+    {
+        // Estados del pescador (Jugador 1): pesca / caminata
+        if (!jugador.isFishing) return EstadoJugador.Caminando;
+        // isReeling va primero: mientras recoge, alreadyCast sigue en true
+        if (jugador.isReeling) return EstadoJugador.Recogiendo;
+        if (jugador.alreadyCast) return EstadoJugador.Pescando;
+        return EstadoJugador.Preparado;
+    }
+
+    private static string TextoEstado(EstadoJugador estado)
+    {
+        switch (estado)
         {
-            txtEstadoJugador.text = "Caminando";
+            case EstadoJugador.Preparado: return "Preparado";
+            case EstadoJugador.Pescando: return "Pescando";
+            case EstadoJugador.Recogiendo: return "Recogiendo...";
+            default: return "Caminando";
         }
+    }
+
+    private void AplicarTextoEstado(string estado)
+    {
+        if (txtEstadoJugador != null && txtEstadoJugador.text != estado)
+            txtEstadoJugador.text = estado;
     }
 
     private void AjustarVolumenMusica(float objetivo)
