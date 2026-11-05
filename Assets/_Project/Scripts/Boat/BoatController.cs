@@ -104,21 +104,33 @@ public class BoatController : NetworkBehaviour
 
     private void ApplyMovement(Vector2 input)
     {
+        bool seMovio = false;
+
         if (Mathf.Abs(input.y) > 0.1f)
         {
             transform.position += transform.forward * input.y * moveSpeed * Time.deltaTime;
+            seMovio = true;
         }
 
         if (Mathf.Abs(input.x) > 0.1f)
         {
             transform.Rotate(Vector3.up, input.x * turnSpeed * Time.deltaTime);
+            seMovio = true;
         }
+
+        // IMPORTANTE: el jugador (hijo del bote) usa CharacterController, que guarda su propia
+        // posicion interna en el motor de fisica y NO se entera cuando se mueve el padre por
+        // transform. Sin esto, en su siguiente Move() vuelve a su posicion vieja en el mundo:
+        // se "queda en su sitio", la cubierta lo arrastra y puede atravesar el bote y caerse.
+        // SyncTransforms actualiza esa posicion interna para que viaje con el bote.
+        if (seMovio) Physics.SyncTransforms();
     }
 
     public void SnapTo(Vector3 pos, Quaternion rot)
     {
         inputRemoto = Vector2.zero;
         transform.SetPositionAndRotation(pos, rot);
+        Physics.SyncTransforms();
         if (IsServer && IsSpawned) { netBoatPos.Value = pos; netBoatRot.Value = rot; }
     }
 

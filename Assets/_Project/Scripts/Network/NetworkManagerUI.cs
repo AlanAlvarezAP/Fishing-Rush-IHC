@@ -22,7 +22,14 @@ public class NetworkManagerUI : MonoBehaviour
     [Header("Configuracion de Red")]
     [SerializeField] private string pcIPAddress = "127.0.0.1";
     [SerializeField] private ushort port = 7777;
- 
+
+    [Header("Reconexion (celulares)")]
+    [Tooltip("Segundos entre intentos de reconexion cuando el celular pierde la conexion con la PC")]
+    [SerializeField] private float segundosEntreReintentos = 3f;
+
+    private bool modoCliente = false;
+    private Coroutine rutinaReconexion;
+
     private void Awake()
     {
         if (uiContainer != null) uiContainer.SetActive(true);
@@ -87,10 +94,58 @@ public class NetworkManagerUI : MonoBehaviour
 
     private void StartClientMode()
     {
+        if (!modoCliente)
+        {
+            modoCliente = true;
+            // Se avisa tanto si se cae una conexion establecida como si falla el intento de conectar
+            NetworkManager.Singleton.OnClientDisconnectCallback += OnDesconectadoDelServidor;
+        }
+
         SetTransportAsClient();
         NetworkManager.Singleton.StartClient();
         ShowGameHUD();
         Debug.Log("[RED] Conectando como Cliente desde Celular.");
+    }
+
+    private void OnDestroy()
+    {
+        if (modoCliente && NetworkManager.Singleton != null)
+        {
+            NetworkManager.Singleton.OnClientDisconnectCallback -= OnDesconectadoDelServidor;
+        }
+    }
+
+    // ---------------- RECONEXION AUTOMATICA (solo celulares) ----------------
+    // Si el celular pierde la conexion con la PC (o la PC aun no estaba lista), reintenta solo.
+    // Al reconectarse, MenuMismaEscena y el resto de NetworkBehaviours toman el estado actual de la PC.
+    private void OnDesconectadoDelServidor(ulong clientId)
+    {
+        var nm = NetworkManager.Singleton;
+        if (nm == null || nm.IsServer) return;
+        if (clientId != nm.LocalClientId && clientId != NetworkManager.ServerClientId) return;
+
+        Debug.Log("[RED] Se perdio la conexion con la PC. Reintentando...");
+        if (rutinaReconexion == null) rutinaReconexion = StartCoroutine(ReconectarRutina());
+    }
+
+    private IEnumerator ReconectarRutina()
+    {
+        var nm = NetworkManager.Singleton;
+
+        // Espera a que Netcode termine de cerrar la conexion anterior
+        while (nm != null && (nm.ShutdownInProgress || nm.IsListening))
+        {
+            if (!nm.ShutdownInProgress && nm.IsListening) nm.Shutdown();
+            yield return null;
+        }
+
+        yield return new WaitForSecondsRealtime(segundosEntreReintentos);
+
+        rutinaReconexion = null;
+        if (nm != null && !nm.IsListening)
+        {
+            StartClientMode();
+        }
     }
 
     public void UnlockCursor()
