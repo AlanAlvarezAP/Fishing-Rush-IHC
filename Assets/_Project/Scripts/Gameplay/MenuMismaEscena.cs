@@ -59,6 +59,19 @@ public class MenuMismaEscena : NetworkBehaviour
     public Button btnIniciarTutorial;
     public Button btnIniciarSalir;
 
+    [Header("Espera Pescador (Jugador 1) - dentro de Canvas_Menu")]
+    [Tooltip("Panel 'Esperando a jugador 2 (conductor)...' que ve el pescador (PC y VR)")]
+    public GameObject panelEsperandoConductor;
+
+    [Header("Menus Conductor (Jugador 2) - Screen Space Overlay")]
+    public GameObject canvasMenuConductor;
+    [Tooltip("Panel con los botones Jugar / Tutorial / Salir del conductor")]
+    public GameObject panelMenuConductor;
+    [Tooltip("Panel 'Esperando al pescador...' que ve el conductor")]
+    public GameObject panelEsperaConductor;
+    public GameObject canvasGameOverConductor;
+    [SerializeField] private TextMeshProUGUI finalScoreTextConductor;
+
     private bool tutorialCompletado = false;
 
     [SerializeField] private TextMeshProUGUI finalScoreText;
@@ -92,11 +105,17 @@ public class MenuMismaEscena : NetworkBehaviour
         0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner
     );
 
-    private NetworkVariable<bool> isMenuVisibleNet = new NetworkVariable<bool>(
-        true, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner
+    private NetworkVariable<bool> isGameStartedNet = new NetworkVariable<bool>(
+        false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     );
 
-    private NetworkVariable<bool> isGameStartedNet = new NetworkVariable<bool>(
+    // "Listo" de cada jugador (Jugar o Reiniciar). Solo los escribe la PC.
+    // La partida arranca cuando los dos estan listos (o con la tecla Y en pruebas).
+    private NetworkVariable<bool> pescadorListoNet = new NetworkVariable<bool>(
+        false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+
+    private NetworkVariable<bool> conductorListoNet = new NetworkVariable<bool>(
         false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     );
 
@@ -124,31 +143,28 @@ public class MenuMismaEscena : NetworkBehaviour
 
         selectedButtonIndexNet.OnValueChanged += (oldVal, newVal) =>
         {
+            if (EsConductor()) return; // el conductor usa el tactil, no la seleccion del Wiimote
             selectedButtonIndex = newVal;
             ResaltarBotonLocal(newVal);
         };
 
-        isMenuVisibleNet.OnValueChanged += (oldVal, newVal) =>
-        {
-            if (canvasMenu != null) canvasMenu.SetActive(newVal);
-        };
+        pescadorListoNet.OnValueChanged += (oldVal, newVal) => ActualizarEsperaLocal();
+        conductorListoNet.OnValueChanged += (oldVal, newVal) => ActualizarEsperaLocal();
 
+        // Solo el inicio se replica por esta variable. El paso a false (game over) NO cambia
+        // pantallas: el game over y el volver al menu tienen su propio flujo.
         isGameStartedNet.OnValueChanged += (oldVal, newVal) =>
         {
-            if (newVal)
-            {
-                OcultarMenuYEmpezarLocal();
-            }
-            else
-            {
-                MostrarMenuLocal();
-            }
+            if (IsServer) return; // la PC ya lo aplico en IniciarPartidaServidor
+            if (newVal) OcultarMenuYEmpezarLocal();
         };
 
-        if (isGameStartedNet.Value)
+        if (!IsServer && isGameStartedNet.Value)
         {
             OcultarMenuYEmpezarLocal();
         }
+
+        ActualizarEsperaLocal();
 
         // PlayerNetwork tambien toca las camaras al spawnear: se reaplica el rol de esta build
         ConfigurarCamarasPorRol();
@@ -168,12 +184,19 @@ public class MenuMismaEscena : NetworkBehaviour
         if (canvasGameOver != null) canvasGameOver.SetActive(false);
         if (panelWiimote != null) panelWiimote.SetActive(false);
         if (panelTutorial != null) panelTutorial.SetActive(false);
+        if (panelEsperandoConductor != null) panelEsperandoConductor.SetActive(false);
+
+        if (canvasGameOverConductor != null) canvasGameOverConductor.SetActive(false);
+        if (panelEsperaConductor != null) panelEsperaConductor.SetActive(false);
 
         // Controles del bote apagados por defecto; solo se encienden para el conductor al empezar
         SetControlesBoteActivos(false);
 
-        if (canvasMenu != null) canvasMenu.SetActive(true);
-        if (panelMenuPrincipal != null) panelMenuPrincipal.SetActive(true);
+        // Cada rol ve SOLO sus menus: el pescador (PC/VR) los World Space, el conductor los Overlay
+        bool conductor = EsConductor();
+        if (canvasMenu != null) canvasMenu.SetActive(!conductor);
+        if (panelMenuPrincipal != null) panelMenuPrincipal.SetActive(!conductor);
+        if (canvasMenuConductor != null) canvasMenuConductor.SetActive(conductor);
 
         // for less resolution
         var urpAsset = (UniversalRenderPipelineAsset)GraphicsSettings.currentRenderPipeline;
@@ -190,12 +213,6 @@ public class MenuMismaEscena : NetworkBehaviour
     {
         Time.timeScale = 1f;
 
-        if (ConfigJugador.RolActual == TipoJugador.Jugador2_ConductorTablet)
-        {
-            if (panelWiimote != null) panelWiimote.SetActive(false);
-            if (btnWiimote != null) btnWiimote.gameObject.SetActive(false);
-        }
-
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
@@ -208,6 +225,12 @@ public class MenuMismaEscena : NetworkBehaviour
     void Update()
     {
         ActualizarTextoEstadoHUD();
+
+        // --- ATAJOS DE PRUEBA (funcionan en cualquier dispositivo y se aplican en todos) ---
+        // Y: salta la espera del otro jugador y empieza la partida
+        if (Input.GetKeyDown(KeyCode.Y)) PedirForzarInicio();
+        // T: marca el tutorial como hecho y muestra el menu completo (Jugar, Wiimote, Tutorial, Salir)
+        if (Input.GetKeyDown(KeyCode.T)) PedirMenuCompleto();
 
         if (Input.GetKeyDown(KeyCode.Escape))
         {
@@ -303,37 +326,210 @@ public class MenuMismaEscena : NetworkBehaviour
         }
     }
 
-    [ServerRpc(RequireOwnership = false)]
-    private void EmpezarJuegoServerRpc()
-    {
-        isGameStartedNet.Value = true;
-        OcultarMenuYEmpezarLocal();
-        EmpezarJuegoClientRpc();
-    }
+    // =====================================================================
+    // INICIO DE PARTIDA: los dos jugadores deben estar "listos"
+    //   - Pescador: presiona Jugar/Reiniciar en la PC (Wiimote o teclado).
+    //   - Conductor: presiona Jugar/Reiniciar en su celular (se manda a la PC por ServerRpc).
+    //   El primero que presiona ve un panel de espera hasta que el otro tambien presione.
+    //   La PC decide y arranca la partida en todos con isGameStartedNet.
+    // =====================================================================
+
+    /// <summary>Boton Jugar (menu) del pescador y del conductor.</summary>
     public void EmpezarJuego()
     {
-        OcultarMenuYEmpezarLocal();
+        MarcarListoLocal();
+    }
 
-        if (IsSpawned)
+    /// <summary>Boton Reiniciar (game over): igual que Jugar, tambien espera al otro jugador.</summary>
+    public void ReiniciarJuego()
+    {
+        MarcarListoLocal();
+    }
+
+    /// <summary>
+    /// true si aun no hay conexion pero existe NetworkManager (ej. el celular se esta conectando):
+    /// en ese caso no se hace nada, para no arrancar una partida local desincronizada.
+    /// </summary>
+    private bool EsperandoConexion()
+    {
+        if (IsSpawned) return false;
+        if (NetworkManager.Singleton != null)
         {
-            if (IsServer || IsHost)
-            {
-                isGameStartedNet.Value = true;
-                EmpezarJuegoClientRpc();
-            }
-            else
-            {
-                EmpezarJuegoServerRpc();
-            }
+            Debug.Log("[RED] Aun no hay conexion con la PC; se ignora el boton.");
+            return true;
+        }
+        return false;
+    }
+
+    private void MarcarListoLocal()
+    {
+        if (EsperandoConexion()) return;
+
+        // Sin NetworkManager en la escena (pruebas sueltas): empieza directo
+        if (!IsSpawned)
+        {
+            OcultarMenuYEmpezarLocal();
+            return;
+        }
+
+        int rol = (int)ConfigJugador.RolActual;
+        if (IsServer) MarcarListoServidor(rol, true);
+        else MarcarListoServerRpc(rol, true);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void MarcarListoServerRpc(int rol, bool listo)
+    {
+        MarcarListoServidor(rol, listo);
+    }
+
+    private void MarcarListoServidor(int rol, bool listo)
+    {
+        if (!IsServer || isGameStartedNet.Value) return;
+
+        if ((TipoJugador)rol == TipoJugador.Jugador2_ConductorTablet) conductorListoNet.Value = listo;
+        else pescadorListoNet.Value = listo;
+
+        Debug.Log($"[LISTOS] pescador={pescadorListoNet.Value} conductor={conductorListoNet.Value}");
+
+        if (pescadorListoNet.Value && conductorListoNet.Value)
+        {
+            IniciarPartidaServidor();
+        }
+        else
+        {
+            ActualizarEsperaLocal(); // en la PC se aplica de inmediato
         }
     }
 
-    [ClientRpc]
-    private void EmpezarJuegoClientRpc()
+    /// <summary>Solo en la PC: arranca la partida en todos los dispositivos.</summary>
+    private void IniciarPartidaServidor()
     {
-        if (!IsServer)
+        if (!IsServer) return;
+
+        pescadorListoNet.Value = false;
+        conductorListoNet.Value = false;
+
+        FishSpawner spawner = FindObjectOfType<FishSpawner>();
+        if (spawner != null) spawner.ReiniciarSpawning();
+
+        isGameStartedNet.Value = true;   // los clientes empiezan por el OnValueChanged
+        OcultarMenuYEmpezarLocal();
+    }
+
+    /// <summary>Muestra u oculta el panel de espera segun los "listos" (en cada dispositivo).</summary>
+    private void ActualizarEsperaLocal()
+    {
+        if (!IsSpawned) return;
+
+        bool conductor = EsConductor();
+        bool yoListo = conductor ? conductorListoNet.Value : pescadorListoNet.Value;
+        bool otroListo = conductor ? pescadorListoNet.Value : conductorListoNet.Value;
+        bool esperando = yoListo && !otroListo && !isGameStartedNet.Value;
+
+        if (esperando) MostrarEsperaLocal();
+        else OcultarEsperaLocal();
+    }
+
+    private void MostrarEsperaLocal()
+    {
+        if (EsConductor())
+        {
+            if (canvasGameOverConductor != null) canvasGameOverConductor.SetActive(false);
+            if (canvasMenuConductor != null) canvasMenuConductor.SetActive(true);
+            if (panelMenuConductor != null) panelMenuConductor.SetActive(false);
+            if (panelEsperaConductor != null) panelEsperaConductor.SetActive(true);
+            return;
+        }
+
+        if (canvasGameOver != null) canvasGameOver.SetActive(false);
+        if (canvasMenu != null) canvasMenu.SetActive(true);
+        if (panelMenuPrincipal != null) panelMenuPrincipal.SetActive(false);
+        if (panelIniciarMenu != null) panelIniciarMenu.SetActive(false);
+        if (panelWiimote != null) panelWiimote.SetActive(false);
+        if (panelTutorial != null) panelTutorial.SetActive(false);
+        if (panelEsperandoConductor != null) panelEsperandoConductor.SetActive(true);
+
+        // Mientras espera no hay botones que navegar con el Wiimote / teclado
+        activeButtons = null;
+    }
+
+    private void OcultarEsperaLocal()
+    {
+        if (panelEsperaConductor != null) panelEsperaConductor.SetActive(false);
+        if (panelEsperandoConductor != null) panelEsperandoConductor.SetActive(false);
+    }
+
+    // --- TECLA Y (pruebas): salta la espera y empieza en todos ---
+    private void PedirForzarInicio()
+    {
+        if (EsperandoConexion()) return;
+
+        if (!IsSpawned)
         {
             OcultarMenuYEmpezarLocal();
+            return;
+        }
+
+        if (IsServer) ForzarInicioServidor();
+        else ForzarInicioServerRpc();
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void ForzarInicioServerRpc()
+    {
+        ForzarInicioServidor();
+    }
+
+    private void ForzarInicioServidor()
+    {
+        if (!IsServer || isGameStartedNet.Value) return;
+        Debug.Log("[PRUEBAS] Tecla Y: inicio forzado sin esperar al otro jugador");
+        IniciarPartidaServidor();
+    }
+
+    // --- TECLA T (pruebas): tutorial marcado como hecho y menu completo en todos ---
+    private void PedirMenuCompleto()
+    {
+        if (IsSpawned && !IsServer)
+        {
+            MenuCompletoServerRpc();
+            return;
+        }
+        MenuCompletoServidor();
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void MenuCompletoServerRpc()
+    {
+        MenuCompletoServidor();
+    }
+
+    private void MenuCompletoServidor()
+    {
+        if (IsSpawned && isGameStartedNet.Value) return; // durante la partida no hace nada
+
+        AplicarMenuCompletoLocal();
+        if (IsSpawned && IsServer) MenuCompletoClientRpc();
+    }
+
+    [ClientRpc]
+    private void MenuCompletoClientRpc()
+    {
+        if (IsServer) return;
+        AplicarMenuCompletoLocal();
+    }
+
+    private void AplicarMenuCompletoLocal()
+    {
+        tutorialCompletado = true;
+
+        if (EsConductor()) return; // el menu del conductor ya es el completo
+
+        // Solo se refresca si se esta viendo el panel inicial (Tutorial / Salir)
+        if (panelIniciarMenu != null && panelIniciarMenu.activeInHierarchy)
+        {
+            MostrarMenuLocal();
         }
     }
 
@@ -356,6 +552,9 @@ public class MenuMismaEscena : NetworkBehaviour
         if (canvasGameOver != null) canvasGameOver.SetActive(false);
         if (panelWiimote != null) panelWiimote.SetActive(false);
         if (panelTutorial != null) panelTutorial.SetActive(false);
+        if (canvasMenuConductor != null) canvasMenuConductor.SetActive(false);
+        if (canvasGameOverConductor != null) canvasGameOverConductor.SetActive(false);
+        OcultarEsperaLocal();
 
         if (boteObjeto != null)
         {
@@ -370,7 +569,8 @@ public class MenuMismaEscena : NetworkBehaviour
 
         if (rodObjeto != null) rodObjeto.SetActive(true);
 
-        if (canvasGameHUD != null)
+        // HUD (puntaje, estado, tiempo) por ahora solo para el pescador (esta acomodado para VR)
+        if (canvasGameHUD != null && !EsConductor())
         {
             canvasGameHUD.SetActive(true);
             CanvasGroup cg = canvasGameHUD.GetComponent<CanvasGroup>();
@@ -425,7 +625,7 @@ public class MenuMismaEscena : NetworkBehaviour
     [ClientRpc]
     private void AbrirWiimoteClientRpc()
     {
-        if (!IsServer) AbrirWiimoteLocal();
+        if (!IsServer && !EsConductor()) AbrirWiimoteLocal();
     }
 
     private void AbrirWiimoteLocal()
@@ -451,7 +651,7 @@ public class MenuMismaEscena : NetworkBehaviour
     [ClientRpc]
     private void CerrarPanelWiimoteClientRpc()
     {
-        if (!IsServer) CerrarPanelWiimoteLocal();
+        if (!IsServer && !EsConductor()) CerrarPanelWiimoteLocal();
     }
 
     private void CerrarPanelWiimoteLocal()
@@ -463,6 +663,13 @@ public class MenuMismaEscena : NetworkBehaviour
     // --- PANEL TUTORIAL ---
     public void AbrirTutorial()
     {
+        if (EsConductor())
+        {
+            // El tutorial del conductor todavia no existe (sera independiente del pescador)
+            Debug.Log("[TUTORIAL] Tutorial del conductor pendiente.");
+            return;
+        }
+
         AbrirTutorialLocal();
         if (IsSpawned && (IsSpawned && (IsServer || IsHost))) AbrirTutorialClientRpc();
     }
@@ -470,7 +677,7 @@ public class MenuMismaEscena : NetworkBehaviour
     [ClientRpc]
     private void AbrirTutorialClientRpc()
     {
-        if (!IsServer) AbrirTutorialLocal();
+        if (!IsServer && !EsConductor()) AbrirTutorialLocal();
     }
 
     private void AbrirTutorialLocal()
@@ -500,7 +707,7 @@ public class MenuMismaEscena : NetworkBehaviour
     [ClientRpc]
     private void CerrarPanelTutorialClientRpc()
     {
-        if (!IsServer) CerrarPanelTutorialLocal();
+        if (!IsServer && !EsConductor()) CerrarPanelTutorialLocal();
     }
 
     private void CerrarPanelTutorialLocal()
@@ -529,14 +736,21 @@ public class MenuMismaEscena : NetworkBehaviour
     [ClientRpc]
     private void SincronizarMenuClientRpc()
     {
-        if (!IsServer) MostrarMenuLocal();
+        if (!IsServer && !EsConductor()) MostrarMenuLocal();
     }
 
     private void MostrarMenuLocal()
     {
+        if (EsConductor())
+        {
+            MostrarMenuConductorLocal();
+            return;
+        }
+
         AjustarVolumenMusica(volumenMenu);
         Time.timeScale = 1f;
 
+        OcultarEsperaLocal();
         if (canvasMenu != null) canvasMenu.SetActive(true);
         if (panelMenuPrincipal != null) panelMenuPrincipal.SetActive(true); // Restaura panel de botones principales
         if (canvasGameHUD != null) canvasGameHUD.SetActive(false);
@@ -575,22 +789,78 @@ public class MenuMismaEscena : NetworkBehaviour
         }
     }
 
+    /// <summary>Menu del conductor (Overlay): Jugar / Tutorial / Salir. Solo en su celular.</summary>
+    private void MostrarMenuConductorLocal()
+    {
+        AjustarVolumenMusica(volumenMenu);
+        Time.timeScale = 1f;
+
+        if (canvasMenu != null) canvasMenu.SetActive(false);
+        if (canvasGameOver != null) canvasGameOver.SetActive(false);
+        if (canvasGameHUD != null) canvasGameHUD.SetActive(false);
+        if (canvasGameOverConductor != null) canvasGameOverConductor.SetActive(false);
+
+        if (canvasMenuConductor != null) canvasMenuConductor.SetActive(true);
+        if (panelMenuConductor != null) panelMenuConductor.SetActive(true);
+        if (panelEsperaConductor != null) panelEsperaConductor.SetActive(false);
+
+        ApagarJugador();
+
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+    }
+
+    private bool GameOverVisibleLocal()
+    {
+        GameObject go = EsConductor() ? canvasGameOverConductor : canvasGameOver;
+        return go != null && go.activeSelf;
+    }
+
     public void MostrarGameOver()
     {
-        if (canvasGameOver != null && canvasGameOver.activeSelf) return;
+        if (GameOverVisibleLocal()) return;
+
+        // La PC termina la partida para todos: ya no esta en juego y nadie esta listo
+        if (IsSpawned && IsServer)
+        {
+            isGameStartedNet.Value = false;
+            pescadorListoNet.Value = false;
+            conductorListoNet.Value = false;
+        }
+
         MostrarGameOverLocal();
-        if (IsSpawned && (IsServer || IsHost)) SincronizarGameOverClientRpc();
+        if (IsSpawned && IsServer) SincronizarGameOverClientRpc();
     }
 
     [ClientRpc]
     private void SincronizarGameOverClientRpc()
     {
-        if (!IsServer) MostrarGameOverLocal();
+        if (IsServer || GameOverVisibleLocal()) return;
+        MostrarGameOverLocal();
     }
 
     private void MostrarGameOverLocal()
     {
         AjustarVolumenMusica(volumenMenu);
+
+        if (EsConductor())
+        {
+            if (finalScoreTextConductor != null && FishingCounterManager.Instance != null)
+            {
+                finalScoreTextConductor.text = $"Score final: {FishingCounterManager.Instance.GetFishCount()}";
+            }
+
+            if (canvasGameHUD != null) canvasGameHUD.SetActive(false);
+            if (canvasMenuConductor != null) canvasMenuConductor.SetActive(false);
+            if (canvasGameOverConductor != null) canvasGameOverConductor.SetActive(true);
+
+            ApagarJugador();
+
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+            return;
+        }
+
         if (finalScoreText != null && FishingCounterManager.Instance != null)
         {
             int score = FishingCounterManager.Instance.GetFishCount();
@@ -621,52 +891,35 @@ public class MenuMismaEscena : NetworkBehaviour
         }
     }
 
-    public void ReiniciarJuego()
-    {
-        ReiniciarJuegoLocal();
-        if (IsSpawned && (IsServer || IsHost)) ReiniciarJuegoClientRpc();
-    }
-
-    [ClientRpc]
-    private void ReiniciarJuegoClientRpc()
-    {
-        if (!IsServer) ReiniciarJuegoLocal();
-    }
-
-    private void ReiniciarJuegoLocal()
-    {
-        Time.timeScale = 1f;
-
-        FishSpawner spawner = FindObjectOfType<FishSpawner>();
-        if (spawner != null && (NetworkManager.Singleton == null || NetworkManager.Singleton.IsServer))
-        {
-            spawner.ReiniciarSpawning();
-        }
-
-        //EmpezarJuego();
-        OcultarMenuYEmpezarLocal();
-    }
-
+    /// <summary>
+    /// Volver al menu es INDEPENDIENTE por jugador:
+    /// - Conductor: solo su celular vuelve a su menu (y deja de estar listo).
+    /// - Pescador: la PC y el celular VR vuelven al menu (el conductor no se entera).
+    /// </summary>
     public void VolverAlMenuPrincipal()
     {
+        if (EsConductor())
+        {
+            if (IsSpawned && !IsServer) MarcarListoServerRpc((int)TipoJugador.Jugador2_ConductorTablet, false);
+            MostrarMenuLocal();
+            return;
+        }
+
+        if (IsSpawned && IsServer) pescadorListoNet.Value = false;
+
         VolverAlMenuPrincipalLocal();
-        if (IsSpawned && (IsServer || IsHost)) VolverAlMenuPrincipalClientRpc();
+        if (IsSpawned && IsServer) VolverAlMenuPrincipalClientRpc();
     }
 
     [ClientRpc]
     private void VolverAlMenuPrincipalClientRpc()
     {
-        if (!IsServer) VolverAlMenuPrincipalLocal();
+        if (!IsServer && !EsConductor()) VolverAlMenuPrincipalLocal();
     }
 
     private void VolverAlMenuPrincipalLocal()
     {
         Time.timeScale = 1f;
-
-        if (IsServer && IsSpawned)
-        {
-            isGameStartedNet.Value = false;
-        }
 
         if (canvasGameOver != null) canvasGameOver.SetActive(false);
 
@@ -861,8 +1114,7 @@ public class MenuMismaEscena : NetworkBehaviour
     [ClientRpc]
     private void SincronizarSeleccionBotonClientRpc(int index)
     {
-        Debug.Log($"[UI DEBUG] ClientRpc recibido en celular. indice: {index}");
-        if (!IsServer)
+        if (!IsServer && !EsConductor())
         {
             ResaltarBotonLocal(index);
         }
@@ -882,7 +1134,7 @@ public class MenuMismaEscena : NetworkBehaviour
     [ClientRpc]
     private void HudPescaClientRpc(int accion, float valor, string texto, int a, int b)
     {
-        if (IsServer) return; // la PC ya lo mostro localmente
+        if (IsServer || EsConductor()) return; // la PC ya lo mostro; el conductor no usa el HUD de pesca
         AplicarHUDPescaVisor((HudPescaAccion)accion, valor, texto, a, b);
     }
 
@@ -951,7 +1203,7 @@ public class MenuMismaEscena : NetworkBehaviour
     [ClientRpc]
     private void AnuncioClientRpc(int accion, int gesto, float duracion)
     {
-        if (IsServer) return; // la PC ya lo mostro localmente
+        if (IsServer || EsConductor()) return; // la PC ya lo mostro; avisos por ahora solo para el VR
 
         try
         {
@@ -1016,7 +1268,7 @@ public class MenuMismaEscena : NetworkBehaviour
     [ClientRpc]
     private void SetModoEscenaTutorialClientRpc(bool enPrueba)
     {
-        if (!IsServer) AplicarModoEscenaTutorialLocal(enPrueba);
+        if (!IsServer && !EsConductor()) AplicarModoEscenaTutorialLocal(enPrueba);
     }
 
     private void AplicarModoEscenaTutorialLocal(bool enPrueba)
