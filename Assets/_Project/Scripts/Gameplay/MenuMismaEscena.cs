@@ -9,7 +9,7 @@ using TMPro;
 using WiimoteApi;
 #endif
 
-public class MenuMismaEscena : NetworkBehaviour
+public partial class MenuMismaEscena : NetworkBehaviour
 {
     public enum HudPescaAccion
     {
@@ -105,9 +105,42 @@ public class MenuMismaEscena : NetworkBehaviour
         0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner
     );
 
+    // Momento (en tiempo del servidor) en que termina la partida. Cada dispositivo calcula el
+    // tiempo restante con esto, asi un celular que se reconecta ve el mismo tiempo que la PC.
+    // Declarada ANTES de isGameStartedNet para que llegue antes que el inicio de partida.
+    private NetworkVariable<double> finPartidaNet = new NetworkVariable<double>(
+        0d, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+
     private NetworkVariable<bool> isGameStartedNet = new NetworkVariable<bool>(
         false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     );
+
+    // Pantalla actual del pescador (PC). Sirve para que el celular VR, si se reconecta,
+    // aparezca en la misma pantalla que la PC (los RPCs que se perdio no se repiten).
+    public enum PantallaPescador : byte
+    {
+        Menu = 0,
+        Tutorial = 1,
+        Wiimote = 2,
+        Juego = 3,
+        GameOver = 4
+    }
+
+    private NetworkVariable<PantallaPescador> pantallaPescadorNet = new NetworkVariable<PantallaPescador>(
+        PantallaPescador.Menu, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+
+    private NetworkVariable<bool> tutorialCompletadoNet = new NetworkVariable<bool>(
+        false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+
+    private NetworkVariable<bool> tutorialEnPruebaNet = new NetworkVariable<bool>(
+        false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+
+    // Servidor: cliente que marco "listo" como conductor (para liberarlo si se desconecta)
+    private ulong clienteConductorListo = ulong.MaxValue;
 
     // "Listo" de cada jugador (Jugar o Reiniciar). Solo los escribe la PC.
     // La partida arranca cuando los dos estan listos (o con la tecla Y en pruebas).
@@ -138,30 +171,34 @@ public class MenuMismaEscena : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        estadoJugadorNet.OnValueChanged += (oldVal, newVal) => AplicarTextoEstado(TextoEstado(newVal));
+        // Handlers con nombre (no lambdas) para poder quitarlos en OnNetworkDespawn: si el celular
+        // se reconecta, este objeto vuelve a spawnear y sin esto se suscribirian dos veces.
+        estadoJugadorNet.OnValueChanged += OnEstadoJugadorCambio;
+        selectedButtonIndexNet.OnValueChanged += OnSeleccionCambio;
+        pescadorListoNet.OnValueChanged += OnListoCambio;
+        conductorListoNet.OnValueChanged += OnListoCambio;
+        isGameStartedNet.OnValueChanged += OnPartidaIniciadaCambio;
+
         AplicarTextoEstado(TextoEstado(estadoJugadorNet.Value));
 
-        selectedButtonIndexNet.OnValueChanged += (oldVal, newVal) =>
-        {
-            if (EsConductor()) return; // el conductor usa el tactil, no la seleccion del Wiimote
-            selectedButtonIndex = newVal;
-            ResaltarBotonLocal(newVal);
-        };
+        InicializarLogsRed(); // quien se conecta y ping (MenuMismaEscena.Red.cs)
 
-        pescadorListoNet.OnValueChanged += (oldVal, newVal) => ActualizarEsperaLocal();
-        conductorListoNet.OnValueChanged += (oldVal, newVal) => ActualizarEsperaLocal();
-
-        // Solo el inicio se replica por esta variable. El paso a false (game over) NO cambia
-        // pantallas: el game over y el volver al menu tienen su propio flujo.
-        isGameStartedNet.OnValueChanged += (oldVal, newVal) =>
+        if (IsServer)
         {
-            if (IsServer) return; // la PC ya lo aplico en IniciarPartidaServidor
-            if (newVal) OcultarMenuYEmpezarLocal();
-        };
-
-        if (!IsServer && isGameStartedNet.Value)
+            NetworkManager.OnClientDisconnectCallback += OnClienteDesconectado;
+        }
+        else
         {
-            OcultarMenuYEmpezarLocal();
+            // Cliente (al conectarse por primera vez o al RECONECTARSE): toma el estado de la PC
+            if (EsConductor())
+            {
+                if (isGameStartedNet.Value) OcultarMenuYEmpezarLocal();
+            }
+            else
+            {
+                tutorialCompletado = tutorialCompletadoNet.Value;
+                RestaurarPantallaPescadorLocal();
+            }
         }
 
         ActualizarEsperaLocal();
@@ -169,6 +206,113 @@ public class MenuMismaEscena : NetworkBehaviour
         // PlayerNetwork tambien toca las camaras al spawnear: se reaplica el rol de esta build
         ConfigurarCamarasPorRol();
     }
+
+    public override void OnNetworkDespawn()
+    {
+        estadoJugadorNet.OnValueChanged -= OnEstadoJugadorCambio;
+        selectedButtonIndexNet.OnValueChanged -= OnSeleccionCambio;
+        pescadorListoNet.OnValueChanged -= OnListoCambio;
+        conductorListoNet.OnValueChanged -= OnListoCambio;
+        isGameStartedNet.OnValueChanged -= OnPartidaIniciadaCambio;
+
+        if (NetworkManager != null) NetworkManager.OnClientDisconnectCallback -= OnClienteDesconectado;
+        FinalizarLogsRed();
+
+        base.OnNetworkDespawn();
+    }
+
+    private void OnEstadoJugadorCambio(EstadoJugador anterior, EstadoJugador nuevo)
+    {
+        AplicarTextoEstado(TextoEstado(nuevo));
+    }
+
+    private void OnSeleccionCambio(int anterior, int nuevo)
+    {
+        if (EsConductor()) return; // el conductor usa el tactil, no la seleccion del Wiimote
+        selectedButtonIndex = nuevo;
+        ResaltarBotonLocal(nuevo);
+    }
+
+    private void OnListoCambio(bool anterior, bool nuevo)
+    {
+        ActualizarEsperaLocal();
+    }
+
+    // Solo el inicio se replica por esta variable. El paso a false (game over) NO cambia
+    // pantallas: el game over y el volver al menu tienen su propio flujo.
+    private void OnPartidaIniciadaCambio(bool anterior, bool nuevo)
+    {
+        if (IsServer) return; // la PC ya lo aplico en IniciarPartidaServidor
+        if (nuevo) OcultarMenuYEmpezarLocal();
+    }
+
+    /// <summary>Servidor: si se desconecta el cliente que estaba "listo" como conductor, se libera.</summary>
+    private void OnClienteDesconectado(ulong clientId)
+    {
+        if (!IsServer) return;
+        if (clientId != clienteConductorListo) return;
+
+        clienteConductorListo = ulong.MaxValue;
+        if (conductorListoNet.Value && !isGameStartedNet.Value)
+        {
+            conductorListoNet.Value = false;
+            Debug.Log("[LISTOS] El conductor se desconecto: deja de estar listo.");
+            ActualizarEsperaLocal();
+        }
+    }
+
+    /// <summary>Celular VR: muestra la misma pantalla que tiene la PC en este momento.</summary>
+    private void RestaurarPantallaPescadorLocal()
+    {
+        switch (pantallaPescadorNet.Value)
+        {
+            case PantallaPescador.Juego:
+                if (isGameStartedNet.Value) OcultarMenuYEmpezarLocal();
+                else MostrarMenuLocal();
+                break;
+            case PantallaPescador.GameOver:
+                MostrarGameOverLocal();
+                break;
+            case PantallaPescador.Tutorial:
+                AbrirTutorialLocal();
+                if (tutorialEnPruebaNet.Value) AplicarModoEscenaTutorialLocal(true);
+                break;
+            case PantallaPescador.Wiimote:
+                AbrirWiimoteLocal();
+                break;
+            default:
+                MostrarMenuLocal();
+                break;
+        }
+    }
+
+    private void SetPantallaPescadorServidor(PantallaPescador pantalla)
+    {
+        if (IsSpawned && IsServer && !EsConductor() && pantallaPescadorNet.Value != pantalla)
+        {
+            pantallaPescadorNet.Value = pantalla;
+        }
+    }
+
+    private void MarcarTutorialCompletadoLocal()
+    {
+        tutorialCompletado = true;
+        if (IsSpawned && IsServer && !tutorialCompletadoNet.Value) tutorialCompletadoNet.Value = true;
+    }
+
+    // ---------------- TIEMPO DE PARTIDA (lo usa FishingTimerHUD) ----------------
+    /// <summary>true si el tiempo lo marca la PC (hay red y la partida tiene hora de fin).</summary>
+    public bool TiempoSincronizado => IsSpawned && finPartidaNet.Value > 0d;
+
+    public float TiempoRestanteRed()
+    {
+        if (!TiempoSincronizado) return 0f;
+        double restante = finPartidaNet.Value - NetworkManager.ServerTime.Time;
+        return Mathf.Max(0f, (float)restante);
+    }
+
+    /// <summary>Solo la PC (o sin red) decide que se acabo el tiempo y muestra el game over a todos.</summary>
+    public bool PuedeTerminarPartida => !IsSpawned || IsServer;
 
     void Awake()
     {
@@ -225,6 +369,7 @@ public class MenuMismaEscena : NetworkBehaviour
     void Update()
     {
         ActualizarTextoEstadoHUD();
+        ActualizarPingRed();
 
         // --- ATAJOS DE PRUEBA (funcionan en cualquier dispositivo y se aplican en todos) ---
         // Y: salta la espera del otro jugador y empieza la partida
@@ -378,8 +523,12 @@ public class MenuMismaEscena : NetworkBehaviour
     }
 
     [ServerRpc(RequireOwnership = false)]
-    private void MarcarListoServerRpc(int rol, bool listo)
+    private void MarcarListoServerRpc(int rol, bool listo, ServerRpcParams rpcParams = default)
     {
+        if ((TipoJugador)rol == TipoJugador.Jugador2_ConductorTablet)
+        {
+            clienteConductorListo = listo ? rpcParams.Receive.SenderClientId : ulong.MaxValue;
+        }
         MarcarListoServidor(rol, listo);
     }
 
@@ -412,6 +561,11 @@ public class MenuMismaEscena : NetworkBehaviour
 
         FishSpawner spawner = FindObjectOfType<FishSpawner>();
         if (spawner != null) spawner.ReiniciarSpawning();
+
+        // Hora de fin de la partida en tiempo del servidor (antes de isGameStartedNet)
+        FishingTimerHUD timer = FindObjectOfType<FishingTimerHUD>(true);
+        float duracion = timer != null ? timer.DuracionPartida : 180f;
+        finPartidaNet.Value = NetworkManager.ServerTime.Time + duracion;
 
         isGameStartedNet.Value = true;   // los clientes empiezan por el OnValueChanged
         OcultarMenuYEmpezarLocal();
@@ -522,7 +676,7 @@ public class MenuMismaEscena : NetworkBehaviour
 
     private void AplicarMenuCompletoLocal()
     {
-        tutorialCompletado = true;
+        MarcarTutorialCompletadoLocal();
 
         if (EsConductor()) return; // el menu del conductor ya es el completo
 
@@ -535,6 +689,7 @@ public class MenuMismaEscena : NetworkBehaviour
 
     private void OcultarMenuYEmpezarLocal()
     {
+        SetPantallaPescadorServidor(PantallaPescador.Juego);
         AjustarVolumenMusica(volumenJuego);
         Time.timeScale = 1f;
 
@@ -543,7 +698,9 @@ public class MenuMismaEscena : NetworkBehaviour
         // Solo el Jugador 2 (conductor) ve los controles del bote
         SetControlesBoteActivos(EsConductor());
 
-        if (FishingCounterManager.Instance != null)
+        // Solo la PC reinicia el puntaje: si un celular se reconecta a mitad de partida y pasa
+        // por aqui, NO debe borrar el puntaje de todos
+        if (FishingCounterManager.Instance != null && (!IsSpawned || IsServer))
         {
             FishingCounterManager.Instance.ResetCounter();
         }
@@ -630,6 +787,7 @@ public class MenuMismaEscena : NetworkBehaviour
 
     private void AbrirWiimoteLocal()
     {
+        SetPantallaPescadorServidor(PantallaPescador.Wiimote);
         if (canvasMenu != null) canvasMenu.SetActive(true);
         if (panelIniciarMenu != null) panelIniciarMenu.SetActive(false);
         if (panelMenuPrincipal != null) panelMenuPrincipal.SetActive(false);
@@ -682,6 +840,7 @@ public class MenuMismaEscena : NetworkBehaviour
 
     private void AbrirTutorialLocal()
     {
+        SetPantallaPescadorServidor(PantallaPescador.Tutorial);
         AjustarVolumenMusica(volumenJuego);
 
         if (canvasMenu != null) canvasMenu.SetActive(true);
@@ -714,7 +873,7 @@ public class MenuMismaEscena : NetworkBehaviour
     {
         if (panelTutorial != null) panelTutorial.SetActive(false);
         ResetearPosicionesOriginales();
-        tutorialCompletado = true;
+        MarcarTutorialCompletadoLocal();
         MostrarMenuLocal();
     }
 
@@ -747,6 +906,7 @@ public class MenuMismaEscena : NetworkBehaviour
             return;
         }
 
+        SetPantallaPescadorServidor(PantallaPescador.Menu);
         AjustarVolumenMusica(volumenMenu);
         Time.timeScale = 1f;
 
@@ -860,6 +1020,8 @@ public class MenuMismaEscena : NetworkBehaviour
             Cursor.visible = true;
             return;
         }
+
+        SetPantallaPescadorServidor(PantallaPescador.GameOver);
 
         if (finalScoreText != null && FishingCounterManager.Instance != null)
         {
@@ -1261,6 +1423,7 @@ public class MenuMismaEscena : NetworkBehaviour
     // =====================================================================
     public void SetModoEscenaTutorial(bool enPrueba)
     {
+        if (IsSpawned && IsServer) tutorialEnPruebaNet.Value = enPrueba;
         AplicarModoEscenaTutorialLocal(enPrueba);
         if (IsSpawned && IsServer) SetModoEscenaTutorialClientRpc(enPrueba);
     }
