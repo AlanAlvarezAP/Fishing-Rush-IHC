@@ -1,8 +1,14 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
 
+/// <summary>
+/// Tiempo de la partida.
+/// - Con red: la PC fija la hora de fin (MenuMismaEscena.finPartidaNet, en tiempo del servidor) y
+///   cada dispositivo muestra el tiempo restante calculado con esa hora. Asi un celular que se
+///   reconecta a mitad de partida ve exactamente el mismo tiempo que la PC.
+/// - Solo la PC (o el modo sin red) decide que se acabo el tiempo y muestra el game over a todos;
+///   los celulares solo llegan a 00:00 y esperan el game over de la PC.
+/// </summary>
 public class FishingTimerHUD : MonoBehaviour
 {
     [Header("Componentes UI")]
@@ -16,11 +22,15 @@ public class FishingTimerHUD : MonoBehaviour
     private float currentTime;
     private bool isTimerRunning = false;
 
+    /// <summary>Duracion de la partida en segundos (la usa la PC para fijar la hora de fin).</summary>
+    public float DuracionPartida => totalGameTime;
+
     void Awake()
     {
         // Forzamos la limpieza del tiempo al cargar el script o reiniciar la escena
         currentTime = totalGameTime;
         isTimerRunning = false;
+        if (menuManager == null) menuManager = FindObjectOfType<MenuMismaEscena>();
     }
 
     void Start()
@@ -34,14 +44,21 @@ public class FishingTimerHUD : MonoBehaviour
     {
         if (!isTimerRunning) return;
 
-        if (currentTime > 0)
+        if (menuManager != null && menuManager.TiempoSincronizado)
         {
-            currentTime -= Time.deltaTime;
-            if (currentTime < 0) currentTime = 0;
-
-            UpdateTimerDisplay(currentTime);
+            // Tiempo de la PC (igual en todos los dispositivos)
+            currentTime = menuManager.TiempoRestanteRed();
         }
         else
+        {
+            // Sin red: cuenta local
+            currentTime -= Time.deltaTime;
+            if (currentTime < 0) currentTime = 0;
+        }
+
+        UpdateTimerDisplay(currentTime);
+
+        if (currentTime <= 0f)
         {
             currentTime = 0;
             isTimerRunning = false;
@@ -51,9 +68,9 @@ public class FishingTimerHUD : MonoBehaviour
 
     public void StartTimer()
     {
-        currentTime = totalGameTime; // Reinicia el tiempo exacto al presionar Jugar
+        currentTime = totalGameTime; // con red, en el siguiente Update se toma el tiempo de la PC
         isTimerRunning = true;
-        Debug.Log("[TEMPORIZADOR] Los 3 minutos han comenzado");
+        Debug.Log("[TEMPORIZADOR] La partida ha comenzado");
     }
 
     private void UpdateTimerDisplay(float timeToDisplay)
@@ -83,11 +100,12 @@ public class FishingTimerHUD : MonoBehaviour
             timerText.color = Color.red;
         }
 
-        if (menuManager != null)
+        // Solo la PC (o sin red) termina la partida; a los celulares les llega el game over de la PC
+        if (menuManager != null && menuManager.PuedeTerminarPartida)
         {
             menuManager.MostrarGameOver();
         }
 
-        Debug.Log("[TEMPORIZADOR] Los 3 minutos han terminado.");
+        Debug.Log("[TEMPORIZADOR] Se termino el tiempo.");
     }
 }
