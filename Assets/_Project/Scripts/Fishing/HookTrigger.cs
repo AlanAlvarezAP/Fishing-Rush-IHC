@@ -1,4 +1,5 @@
 using UnityEngine;
+using Unity.Netcode;
 
 public class HookTrigger : MonoBehaviour
 {
@@ -6,15 +7,29 @@ public class HookTrigger : MonoBehaviour
 
     void Start()
     {
-        playerController = FindObjectOfType<ThirdPController>();
+        BuscarJugador();
+    }
+
+    private void BuscarJugador()
+    {
+        if (playerController == null)
+        {
+            playerController = FindObjectOfType<ThirdPController>();
+        }
     }
 
     void OnTriggerEnter(Collider other)
     {
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer) return;
+
         FishCube fish = other.GetComponent<FishCube>();
-        if (fish != null && playerController != null)
+        if (fish != null)
         {
-            fish.HookMe(transform, playerController.transform);
+            BuscarJugador();
+            if (playerController != null)
+            {
+                fish.HookMe(transform, playerController.transform);
+            }
         }
     }
 }

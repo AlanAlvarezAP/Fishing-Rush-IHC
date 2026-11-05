@@ -6,6 +6,8 @@ TagManager:
   tags:
   - Ground
   - Fish
+  - Ground
+  - Hook
   layers:
   - Default
   - TransparentFX
@@ -42,4 +44,10 @@ TagManager:
   m_SortingLayers:
   - name: Default
     uniqueID: 0
+    locked: 0
+  - name: WorldUI
+    uniqueID: 2294173401
+    locked: 0
+  - name: MenuUI
+    uniqueID: 650487009
     locked: 0

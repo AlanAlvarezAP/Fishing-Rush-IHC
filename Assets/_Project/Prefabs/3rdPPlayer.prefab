@@ -1,5 +1,37 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!1 &66042521503237188
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8268847426392694190}
+  m_Layer: 8
+  m_Name: CameraOffset
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8268847426392694190
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 66042521503237188}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0.5, z: -0.15}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 7878045610116645595}
+  m_Father: {fileID: 2604924809172461127}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &422202970320427777
 GameObject:
   m_ObjectHideFlags: 0
@@ -905,7 +937,7 @@ GameObject:
   - component: {fileID: 7283788629524619890}
   - component: {fileID: 65833480153131191}
   m_Layer: 0
-  m_Name: Cube (4)
+  m_Name: RodTip
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -919,13 +951,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3973668979630334273}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
-  m_LocalPosition: {x: 0, y: 0.5, z: 0.85}
-  m_LocalScale: {x: 0.1, y: 0.75, z: 0.1}
+  m_LocalRotation: {x: -0.7054128, y: -0.00409211, z: -0.0042689918, w: -0.7087721}
+  m_LocalPosition: {x: 0, y: 1.4999999, z: 0.85000026}
+  m_LocalScale: {x: 0.10000114, y: 0.74999803, z: 0.1000003}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 2604924809172461127}
-  m_LocalEulerAnglesHint: {x: 90, y: 0, z: 0}
+  m_Father: {fileID: 7684147590232592765}
+  m_LocalEulerAnglesHint: {x: -1.139, y: 90, z: -21.871}
 --- !u!33 &3386410911857696447
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -1024,9 +1056,9 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4007870944022636038}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.4182012, y: -0.5381906, z: -0.37267455, w: 0.62973994}
-  m_LocalPosition: {x: 0.766, y: 0.422, z: -0.065}
-  m_LocalScale: {x: 0.05, y: 1, z: 0.05}
+  m_LocalRotation: {x: -0.41820118, y: -0.53819066, z: -0.37267464, w: 0.6297399}
+  m_LocalPosition: {x: 0.7659999, y: 0.42199996, z: -0.06499998}
+  m_LocalScale: {x: 0.05000001, y: 1, z: 0.049999997}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 2677710284258064706}
@@ -1134,13 +1166,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4359791766550691380}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.5, z: -0.15}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 8830055516362379222}
-  m_Father: {fileID: 2604924809172461127}
+  m_Father: {fileID: 8268847426392694190}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!20 &1683559273597744252
 Camera:
@@ -1724,11 +1756,11 @@ GameObject:
   m_Component:
   - component: {fileID: 2604924809172461127}
   - component: {fileID: 1773590718811761831}
+  - component: {fileID: 6364882479403708188}
   - component: {fileID: 3740452159392131279}
   - component: {fileID: 2557545417108597661}
   - component: {fileID: 6249242676844834898}
   - component: {fileID: 2193453062006052576}
-  - component: {fileID: 6364882479403708188}
   - component: {fileID: 7940914214555695703}
   - component: {fileID: 4219340444398341189}
   - component: {fileID: 456509569015343127}
@@ -1753,12 +1785,11 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 3382326588731418626}
   - {fileID: 7684147590232592765}
   - {fileID: 954634196201066998}
   - {fileID: 7081656341331363205}
   - {fileID: 3863366480179610110}
-  - {fileID: 7878045610116645595}
+  - {fileID: 8268847426392694190}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!143 &1773590718811761831
@@ -1787,6 +1818,27 @@ CharacterController:
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &6364882479403708188
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6216794513495962250}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  GlobalObjectIdHash: 2879536398
+  InScenePlacedSourceGlobalObjectIdHash: 0
+  AlwaysReplicateAsRoot: 0
+  SynchronizeTransform: 1
+  ActiveSceneSynchronization: 0
+  SceneMigrationSynchronization: 1
+  SpawnWithObservers: 1
+  DontDestroyWithOwner: 0
+  AutoObjectParentSync: 1
 --- !u!114 &3740452159392131279
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1815,11 +1867,34 @@ MonoBehaviour:
   alreadyCast: 0
   isFishing: 0
   isReeling: 0
+  isCastingInProcess: 0
+  isHookOccupied: 0
   fishingRod: {fileID: 4007870944022636038}
   lineObject: {fileID: 0}
   hookObject: {fileID: 0}
   rodTip: {fileID: 3382326588731418626}
   hookCollider: {fileID: 0}
+  castDelay: 1.75
+  reelSpeed: 15
+  hangDistance: 0.4
+  hookFollowSpeed: 12
+  waterSurfaceY: -2
+  liftThreshold: 0.9
+  waterRippleAmount: 0.1
+  phase1MaxTime: 1.5
+  windowSize: 25
+  gestureWindowSize: 40
+  umbralMinimo: 0.6
+  umbralAlto: 1.8
+  fuerzaBaja: 12
+  fuerzaAlta: 35
+  sfxSource: {fileID: 0}
+  sfxLanzamiento: {fileID: 0}
+  sfxAciertoPatron: {fileID: 0}
+  sfxFalloPatron: {fileID: 0}
+  sfxHazPatron: {fileID: 0}
+  sfxVictoriaMinijuego: {fileID: 0}
+  sfxDerrotaMinijuego: {fileID: 0}
 --- !u!54 &2557545417108597661
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -1876,30 +1951,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   firstPersonCamera: {fileID: 1683559273597744252}
   thirdPersonCamera: {fileID: 0}
+  characterMeshRenderers: []
   toggleKey: 99
   startInFirstPerson: 0
   isFirstPerson: 0
---- !u!114 &6364882479403708188
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6216794513495962250}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 3849919638
-  InScenePlacedSourceGlobalObjectIdHash: 0
-  AlwaysReplicateAsRoot: 0
-  SynchronizeTransform: 1
-  ActiveSceneSynchronization: 0
-  SceneMigrationSynchronization: 1
-  SpawnWithObservers: 1
-  DontDestroyWithOwner: 0
-  AutoObjectParentSync: 1
 --- !u!114 &7940914214555695703
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2157,6 +2212,10 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 9500000, guid: 11d723d356152494ea1f1dc10ed906ef, type: 3}
+      propertyPath: m_Avatar
+      value: 
+      objectReference: {fileID: 9000000, guid: 11d723d356152494ea1f1dc10ed906ef, type: 3}
+    - target: {fileID: 9500000, guid: 11d723d356152494ea1f1dc10ed906ef, type: 3}
       propertyPath: m_Controller
       value: 
       objectReference: {fileID: 9100000, guid: 3964edee805e94c2ca573fec3b058bbf, type: 2}
@@ -2167,9 +2226,13 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects:
+    - targetCorrespondingSourceObject: {fileID: 400138, guid: 11d723d356152494ea1f1dc10ed906ef,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3382326588731418626}
     - targetCorrespondingSourceObject: {fileID: 400018, guid: 11d723d356152494ea1f1dc10ed906ef,
         type: 3}
-      insertIndex: 0
+      insertIndex: -1
       addedObject: {fileID: 4379694996128282208}
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 11d723d356152494ea1f1dc10ed906ef, type: 3}

@@ -14,14 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   TargetPingFrequency: 0.5
   TargetPingPrecision: 0.3
-  TargetPositionPrecision: 2
-  TargetFar: 2
-  TargetClose: 0.4
-  FastAcceleration: 3
-  NormalAcceleration: 1
+  TargetPositionPrecision: 15
+  TargetFar: 10
+  TargetClose: 3
+  FastAcceleration: 8
+  NormalAcceleration: 4
   AccelerationFadeInSpeed: 20
-  SlowAcceleration: 0.2
-  BaseTurningAcceleration: 100
+  SlowAcceleration: 2
+  BaseTurningAcceleration: 400
   LiquidDrag: 2
   AnimClipBite: bite
   BoneMouth: bone_mouth

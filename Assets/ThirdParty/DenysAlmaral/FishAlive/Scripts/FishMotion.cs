@@ -169,8 +169,13 @@ namespace FishAlive
             }
         }
 
- 
-
+        public void SetConfig(SwimConfig newConfig)
+        {
+            if (newConfig != null)
+            {
+                Config = newConfig;
+            }
+        }
 
       void MarkPath(Vector3 pos, Vector3 dir)
         {
@@ -350,7 +355,7 @@ namespace FishAlive
 
         private void OnTriggerEnter(Collider other)
         {
-             Debug.Log(other.gameObject.name);
+            //Debug.Log(other.gameObject.name);
             //var otherDir = other.transform.position - _transform.position;
             //var upAxis = Vector3.Cross(otherDir, _transform.forward);
             //if (upAxis.sqrMagnitude > 0 )
@@ -417,7 +422,7 @@ namespace FishAlive
             OnBitingEnds?.Invoke(this);
         }
 
-       private void PlayBiteAnimation()
+        private void PlayBiteAnimation()
         {
             StartCoroutine(PlayBiteAnimationCoroutine());
         }
@@ -454,8 +459,23 @@ namespace FishAlive
             //Converting the real speed to a value between 0-1 to fit adecuately in the animation...
             //that's why some values here are magically hard-coded as a result of trial and error
             //TODO: use AnimationCurve later maybe
-            speed *= 2f;
-            speed += acceleration / 4;
+            //speed *= 2f;
+            //speed += acceleration / 4;
+            float visualSpeed = (speed * 2f) + (acceleration / 4f);
+
+            if (speed <= 0.05f)
+            {
+                _animator.speed = 1.0f;
+                _animator.SetFloat(swimSpeedParam, 0);
+            }
+            else
+            {
+                _animator.SetFloat(swimSpeedParam, 1);
+                float clampedAnimSpeed = Mathf.Lerp(0.8f, 1.6f, visualSpeed / 15f);
+                _animator.speed = Mathf.Clamp(clampedAnimSpeed, 0.8f, 1.8f);
+            }
+
+            /*
             if (speed <= 0)
             {
                 _animator.speed = 1.0f;
@@ -471,7 +491,7 @@ namespace FishAlive
                 _animator.speed = 1.0f;
                 _animator.SetFloat(swimSpeedParam, speed);
             }
-
+            */
         }
 
         private float ApplySoftAcceleration(float dt, float accel)

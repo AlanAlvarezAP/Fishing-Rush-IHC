@@ -1,82 +1,71 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
 
+/// <summary>
+/// Camaras y visibilidad del cuerpo del pescador segun el dispositivo:
+/// - PC (servidor): CameraSwitcher habilitado (tercera persona por defecto).
+/// - Celular VR (Jugador 1, cliente): primera persona y cuerpo oculto.
+/// - Celular conductor (Jugador 2, cliente): no toca las camaras del pescador ni oculta su cuerpo
+///   (el conductor ve al pescador desde camaraBoteTablet; eso lo configura MenuMismaEscena).
+/// El giro en Y del celular VR lo envia ThirdPController (TransmitirYawServerRpc).
+/// </summary>
 public class PlayerNetwork : NetworkBehaviour
 {
-    [Header("Cámaras del Personaje")]
-    [SerializeField] private GameObject firstPersonCamera;  // Cámara 1ª Persona (Cardboard VR)
-    [SerializeField] private GameObject thirdPersonCamera; // Cámara 3ª Persona (Cinemachine)
+    [Header("Camaras del Personaje")]
+    [SerializeField] private GameObject firstPersonCamera;
+    [SerializeField] private GameObject thirdPersonCamera;
 
     [Header("Referencias Visuales del Personaje")]
     [SerializeField] private SkinnedMeshRenderer[] characterMeshRenderers;
-
-    // Propiedad pública para que ThirdPController lea la orientación VR
-    public float ClientCameraYaw { get; private set; } = 0f;
 
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
 
-        // 1. Desactivar CameraSwitcher para que no interfiera mediante teclado
         CameraSwitcher switcher = GetComponent<CameraSwitcher>();
-        if (switcher != null) switcher.enabled = false;
+
+        GameObject externalCam = GameObject.FindWithTag("MainCamera");
+        if (externalCam != null && externalCam != firstPersonCamera && externalCam != thirdPersonCamera)
+        {
+            externalCam.SetActive(false);
+        }
 
         if (IsClient && !IsHost)
         {
-            // === ROL CLIENTE (Android VR) ===
+            if (switcher != null) switcher.enabled = false;
 
-            // 1. Buscamos la cámara externa flotante del menú/escena y la apagamos
-            GameObject externalCam = GameObject.FindWithTag("MainCamera");
-            if (externalCam != null && externalCam != firstPersonCamera)
+            if (ConfigJugador.RolActual == TipoJugador.Jugador2_ConductorTablet)
             {
-                externalCam.SetActive(false);
+                // Conductor: el pescador se ve completo desde la camara del bote
+                return;
             }
 
-            // 2. Apagamos la cámara de 3ra persona y activamos la de 1ra persona
             if (thirdPersonCamera != null) thirdPersonCamera.SetActive(false);
 
-            if (firstPersonCamera != null) 
+            if (firstPersonCamera != null)
             {
-                firstPersonCamera.tag = "MainCamera"; // Forzamos el Tag
-                firstPersonCamera.SetActive(true);   // Activamos la cámara VR
+                firstPersonCamera.tag = "MainCamera";
+                firstPersonCamera.SetActive(true);
+
+                AudioListener fpListener = firstPersonCamera.GetComponent<AudioListener>();
+                if (fpListener != null) fpListener.enabled = true;
             }
 
-            // 3. Ocultamos el cuerpo en el visor
-            //HideBodyOnClient();
+            HideBodyOnClient();
         }
         else if (IsServer)
         {
-            // === ROL SERVIDOR / HOST (PC) ===
-            if (firstPersonCamera != null) firstPersonCamera.SetActive(false);
-            if (thirdPersonCamera != null) thirdPersonCamera.SetActive(true);
-        }
-    }
+            if (switcher != null)
+            {
+                if (switcher.characterMeshRenderers == null || switcher.characterMeshRenderers.Length == 0)
+                {
+                    switcher.characterMeshRenderers = characterMeshRenderers;
+                }
 
-    private void Update()
-    {
-        // El Cliente envía constantemente la orientación Y de su mirada al Servidor
-        if (IsClient && !IsHost)
-        {
-            SendHeadRotationToServer();
+                switcher.enabled = true;
+                switcher.SetCameraMode(false);
+            }
         }
-    }
-
-    private void SendHeadRotationToServer()
-    {
-        // Leemos la rotación Y de la primera persona activa
-        if (firstPersonCamera != null)
-        {
-            float currentYaw = firstPersonCamera.transform.eulerAngles.y;
-            UpdateHeadRotationServerRpc(currentYaw);
-        }
-    }
-
-    [ServerRpc(RequireOwnership = false)]
-    private void UpdateHeadRotationServerRpc(float cameraYaw)
-    {
-        ClientCameraYaw = cameraYaw;
     }
 
     private void HideBodyOnClient()

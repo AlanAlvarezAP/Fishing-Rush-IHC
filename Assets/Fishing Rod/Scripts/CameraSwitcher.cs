@@ -2,12 +2,15 @@ using UnityEngine;
 
 public class CameraSwitcher : MonoBehaviour
 {
-    [Header("Cámaras")]
-    public Camera firstPersonCamera;
-    public Camera thirdPersonCamera;
+    [Header("Camaras")]
+    public GameObject firstPersonCamera;
+    public GameObject thirdPersonCamera;
 
-    [Header("Configuración de Entrada")]
-    public KeyCode toggleKey = KeyCode.C; // Tecla temporal para alternar
+    [Header("Referencias Visuales del Personaje")]
+    public SkinnedMeshRenderer[] characterMeshRenderers;
+
+    [Header("Configuracion de Entrada")]
+    public KeyCode toggleKey = KeyCode.C;
     public bool startInFirstPerson = false;
 
     [HideInInspector]
@@ -21,20 +24,21 @@ public class CameraSwitcher : MonoBehaviour
 
     void Update()
     {
-        // Cambiar de cámara mediante teclado
         if (Input.GetKeyDown(toggleKey))
         {
             ToggleCamera();
         }
     }
 
-    /// <summary>
-    /// Invoca el cambio entre 1ra y 3ra persona.
-    /// Puede ser llamado desde código o desde un botón de UI.
-    /// </summary>
     public void ToggleCamera()
     {
         isFirstPerson = !isFirstPerson;
+        UpdateCameraState();
+    }
+
+    public void SetCameraMode(bool firstPerson)
+    {
+        isFirstPerson = firstPerson;
         UpdateCameraState();
     }
 
@@ -42,15 +46,41 @@ public class CameraSwitcher : MonoBehaviour
     {
         if (firstPersonCamera != null && thirdPersonCamera != null)
         {
-            firstPersonCamera.gameObject.SetActive(isFirstPerson);
-            thirdPersonCamera.gameObject.SetActive(!isFirstPerson);
+            AudioListener fpListener = firstPersonCamera.GetComponentInChildren<AudioListener>(true);
+            AudioListener tpListener = thirdPersonCamera.GetComponentInChildren<AudioListener>(true);
 
-            // Asegurar que solo la cámara activa escuche el audio
-            AudioListener fpListener = firstPersonCamera.GetComponent<AudioListener>();
-            AudioListener tpListener = thirdPersonCamera.GetComponent<AudioListener>();
+            if (isFirstPerson)
+            {
+                if (tpListener != null) tpListener.enabled = false;
+                thirdPersonCamera.SetActive(false);
 
-            if (fpListener != null) fpListener.enabled = isFirstPerson;
-            if (tpListener != null) tpListener.enabled = !isFirstPerson;
+                firstPersonCamera.SetActive(true);
+                if (fpListener != null) fpListener.enabled = true;
+            }
+            else
+            {
+                if (fpListener != null) fpListener.enabled = false;
+                firstPersonCamera.SetActive(false);
+
+                thirdPersonCamera.SetActive(true);
+                if (tpListener != null) tpListener.enabled = true;
+            }
+
+            SetMeshVisibility(!isFirstPerson);
+        }
+    }
+
+    public void SetMeshVisibility(bool visible)
+    {
+        if (characterMeshRenderers != null)
+        {
+            foreach (var mesh in characterMeshRenderers)
+            {
+                if (mesh != null)
+                {
+                    mesh.enabled = visible;
+                }
+            }
         }
     }
 }

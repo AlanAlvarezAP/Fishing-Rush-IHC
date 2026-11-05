@@ -12,16 +12,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 61c61766db3413d43a2e2da84e25c90d, type: 3}
   m_Name: SwimAgile
   m_EditorClassIdentifier: 
-  TargetPingFrequency: 0.3
-  TargetPingPrecision: 0.2
-  TargetPositionPrecision: 0.1
-  TargetFar: 2.5
-  TargetClose: 0.8
-  FastAcceleration: 4
-  NormalAcceleration: 1.5
+  TargetPingFrequency: 0.1
+  TargetPingPrecision: 1
+  TargetPositionPrecision: 10
+  TargetFar: 2
+  TargetClose: 1
+  FastAcceleration: 20
+  NormalAcceleration: 20
   AccelerationFadeInSpeed: 40
-  SlowAcceleration: 0.3
-  BaseTurningAcceleration: 240
+  SlowAcceleration: 10
+  BaseTurningAcceleration: 1000
   LiquidDrag: 1.5
   AnimClipBite: bite
   BoneMouth: bone_mouth
