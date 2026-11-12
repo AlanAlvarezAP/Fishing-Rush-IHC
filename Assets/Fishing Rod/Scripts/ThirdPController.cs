@@ -168,6 +168,64 @@ public class ThirdPController : NetworkBehaviour
     private float sendTimer = 0f;
     private bool hasRemoteYaw = false;
 
+    // ------------------------------------------------------------------
+    // NUEVO (tiburon): bloqueo de la cana. La PC guarda la hora de fin en una NetworkVariable,
+    // asi el celular VR y la tablet tambien saben cuanto falta (aviso rojo con cuenta atras).
+    // ------------------------------------------------------------------
+    private NetworkVariable<double> finBloqueoTiburonNet = new NetworkVariable<double>(
+        0d, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+    private float finBloqueoTiburonOffline = 0f;
+
+    /// <summary>NUEVO (tiburon): segundos que faltan para poder usar la cana otra vez (0 = libre).</summary>
+    public float SegundosBloqueoTiburon
+    {
+        get
+        {
+            if (IsSpawned) return Mathf.Max(0f, (float)(finBloqueoTiburonNet.Value - NetworkManager.ServerTime.Time));
+            return Mathf.Max(0f, finBloqueoTiburonOffline - Time.time);
+        }
+    }
+
+    /// <summary>NUEVO (tiburon): true mientras un tiburon tiene la cana bloqueada.</summary>
+    public bool BloqueadoPorTiburon => SegundosBloqueoTiburon > 0f;
+
+    /// <summary>NUEVO (tiburon): bloquea la cana 'segundos'. Solo la PC (servidor).</summary>
+    public void BloquearPorTiburon(float segundos)
+    {
+        if (IsSpawned)
+        {
+            if (!IsServer) return;
+            finBloqueoTiburonNet.Value = NetworkManager.ServerTime.Time + segundos;
+        }
+        else
+        {
+            finBloqueoTiburonOffline = Time.time + segundos;
+        }
+        Debug.Log($"[TIBURON] Cana bloqueada {segundos:0.0} s.");
+    }
+
+    /// <summary>NUEVO (tiburon): un patron bien hecho le quita 'segundos' al bloqueo.</summary>
+    public void ReducirBloqueoTiburon(float segundos)
+    {
+        if (IsSpawned)
+        {
+            if (!IsServer) return;
+            finBloqueoTiburonNet.Value = finBloqueoTiburonNet.Value - segundos;
+        }
+        else
+        {
+            finBloqueoTiburonOffline -= segundos;
+        }
+    }
+
+    /// <summary>NUEVO (tiburon): quita el bloqueo (fin del tiburon o inicio de partida).</summary>
+    public void CancelarBloqueoTiburon()
+    {
+        finBloqueoTiburonOffline = 0f;
+        if (IsSpawned && IsServer && finBloqueoTiburonNet.Value != 0d) finBloqueoTiburonNet.Value = 0d;
+    }
+
     public bool CanFishBite()
     {
         return isFishing && alreadyCast && !isReeling && !isCastingInProcess && !isHookOccupied;
@@ -369,7 +427,8 @@ public class ThirdPController : NetworkBehaviour
         }
 
         // --- EQUIPAR / DESEQUIPAR ---
-        if (Input.GetKeyDown(KeyCode.E) || wiiEquipTrigger)
+        // NUEVO (tiburon): con la cana bloqueada no se puede equipar ni guardar
+        if ((Input.GetKeyDown(KeyCode.E) || wiiEquipTrigger) && !BloqueadoPorTiburon)
         {
             if (!isFishing)
             {
@@ -436,7 +495,8 @@ public class ThirdPController : NetworkBehaviour
         }
 
         // --- LANZAMIENTO ---
-        if ((Input.GetMouseButtonDown(0) || wiiCastTrigger) && isFishing && !alreadyCast && !isReeling && !isCastingInProcess)
+        // NUEVO (tiburon): con la cana bloqueada no se puede lanzar
+        if ((Input.GetMouseButtonDown(0) || wiiCastTrigger) && isFishing && !alreadyCast && !isReeling && !isCastingInProcess && !BloqueadoPorTiburon)
         {
             if (Input.GetMouseButtonDown(0)) debugCalculatedForce = 25f;
             animator.SetTrigger("cast");
@@ -447,7 +507,8 @@ public class ThirdPController : NetworkBehaviour
 
         // --- RECOGIDA ---
         bool inputReel = Input.GetKeyDown(KeyCode.Q) || wiiReelTrigger;
-        if (inputReel && isFishing && alreadyCast && !isReeling && !isCastingInProcess)
+        // NUEVO (tiburon): con la cana bloqueada no se puede recoger
+        if (inputReel && isFishing && alreadyCast && !isReeling && !isCastingInProcess && !BloqueadoPorTiburon)
         {
             StartReeling();
         }

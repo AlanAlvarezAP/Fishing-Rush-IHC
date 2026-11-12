@@ -551,6 +551,9 @@ public partial class MenuMismaEscena : NetworkBehaviour
         }
     }
 
+    /// <summary>NUEVO (tiburon): true mientras hay una partida en juego (no menu, tutorial ni game over).</summary>
+    public bool PartidaEnCurso => !IsSpawned || isGameStartedNet.Value;
+
     /// <summary>Solo en la PC: arranca la partida en todos los dispositivos.</summary>
     private void IniciarPartidaServidor()
     {
@@ -561,6 +564,20 @@ public partial class MenuMismaEscena : NetworkBehaviour
 
         FishSpawner spawner = FindObjectOfType<FishSpawner>();
         if (spawner != null) spawner.ReiniciarSpawning();
+
+        // NUEVO (minas): minas nuevas en cada partida y bote libre
+        MinaSpawner minaSpawner = FindObjectOfType<MinaSpawner>();
+        if (minaSpawner != null) minaSpawner.Reiniciar();
+        if (boteObjeto != null)
+        {
+            BoatController boteMinas = boteObjeto.GetComponent<BoatController>();
+            if (boteMinas != null) boteMinas.CancelarInmovilizacion();
+            if (boteMinas != null) boteMinas.CancelarTambaleo(); // NUEVO (tiburon)
+        }
+
+        // NUEVO (tiburon): la cana empieza libre en cada partida
+        GarantizarJugador();
+        if (playerController != null) playerController.CancelarBloqueoTiburon();
 
         // Hora de fin de la partida en tiempo del servidor (antes de isGameStartedNet)
         FishingTimerHUD timer = FindObjectOfType<FishingTimerHUD>(true);
@@ -986,6 +1003,10 @@ public partial class MenuMismaEscena : NetworkBehaviour
             isGameStartedNet.Value = false;
             pescadorListoNet.Value = false;
             conductorListoNet.Value = false;
+
+            // NUEVO (minas): al terminar la partida se quitan las minas
+            MinaSpawner minaSpawnerFin = FindObjectOfType<MinaSpawner>();
+            if (minaSpawnerFin != null) minaSpawnerFin.ClearAll();
         }
 
         MostrarGameOverLocal();
@@ -1090,6 +1111,10 @@ public partial class MenuMismaEscena : NetworkBehaviour
         {
             spawner.ClearAllFish();
         }
+
+        // NUEVO (minas): al volver al menu se quitan las minas (MinaSpawner solo actua en la PC)
+        MinaSpawner minaSpawner = FindObjectOfType<MinaSpawner>();
+        if (minaSpawner != null) minaSpawner.ClearAll();
 
         MostrarMenuLocal();
     }
