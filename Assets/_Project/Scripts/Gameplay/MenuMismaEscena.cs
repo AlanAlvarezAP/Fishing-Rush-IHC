@@ -1050,6 +1050,12 @@ public partial class MenuMismaEscena : NetworkBehaviour
 
             MinaSpawner minaSpawnerFin = FindObjectOfType<MinaSpawner>();
             if (minaSpawnerFin != null) minaSpawnerFin.ClearAll();
+
+            // Corta cualquier lucha o mordida de tiburon en curso: al quitar los peces, su OnDestroy
+            // libera la cana (anzuelo ocupado, gesto pedido, bloqueo del tiburon) y se detienen
+            // sus corrutinas, que si no seguian pidiendo gestos y vibrando en la pantalla de game over
+            FishSpawner spawnerFin = FindObjectOfType<FishSpawner>();
+            if (spawnerFin != null) spawnerFin.ClearAllFish();
         }
 
         MostrarGameOverLocal();

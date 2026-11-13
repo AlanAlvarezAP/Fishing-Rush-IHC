@@ -46,6 +46,13 @@ public class MinaExplosiva : NetworkBehaviour
         false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     );
 
+    // Centro de la deriva, fijado por la PC al aparecer la mina. Si el celular tomara como centro
+    // la posicion con la que recibe la mina, al RECONECTARSE (cuando la mina ya se movio) giraria
+    // alrededor de un centro equivocado y la veria hasta ~10 m fuera de su lugar real.
+    private NetworkVariable<Vector3> origenNet = new NetworkVariable<Vector3>(
+        Vector3.zero, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+
     private const float SEGUNDOS_ANTES_DE_DESPAWN = 0.3f;
 
     private bool yaExploto = false;
@@ -58,7 +65,8 @@ public class MinaExplosiva : NetworkBehaviour
         base.OnNetworkSpawn();
         explotoNet.OnValueChanged += OnExplotoCambio;
 
-        origen = transform.position;
+        if (IsServer) origenNet.Value = transform.position;
+        origen = origenNet.Value;
         fase = (NetworkObjectId % 360UL) * Mathf.Deg2Rad;
         sentido = (NetworkObjectId % 2UL == 0UL) ? 1f : -1f;
         origenListo = true;
