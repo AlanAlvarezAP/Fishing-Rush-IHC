@@ -38,6 +38,51 @@ public class FishCube : NetworkBehaviour
     [Header("Debug")]
     [SerializeField] private bool showDebug = true;
 
+    [Header("Tiburon: mordida (bloquea la cana)")]
+    [SerializeField] private bool esTiburon = false;
+    [Tooltip("Segundos que queda bloqueada la cana cuando el tiburon muerde el anzuelo")]
+    [SerializeField] private float segundosBloqueo = 8f;
+    [Tooltip("Segundos que le quita al bloqueo cada patron bien hecho")]
+    [SerializeField] private float segundosPorPatron = 1f;
+
+    [Header("Tiburon: choque con el bote (tambaleo)")]
+    [Tooltip("Segundos que se tambalea el bote")]
+    [SerializeField] private float segundosTambaleo = 3f;
+    [Tooltip("Si el bote esta a menos de estos metros, el tiburon va por el")]
+    [SerializeField] private float radioEmbestida = 25f;
+    [Tooltip("Distancia al casco a la que cuenta como choque")]
+    [SerializeField] private float radioChoque = 1.3f;
+    [Tooltip("Velocidad del tiburon al embestir (el bote va a 8)")]
+    [SerializeField] private float velocidadEmbestida = 5f;
+    [Tooltip("Grados por segundo que gira al embestir")]
+    [SerializeField] private float giroEmbestida = 120f;
+    [Tooltip("Si en estos segundos no alcanza al bote, se rinde")]
+    [SerializeField] private float duracionMaxEmbestida = 7f;
+    [Tooltip("Segundos de descanso entre una embestida/choque y el siguiente")]
+    [SerializeField] private float esperaEntreEmbestidas = 12f;
+
+    public bool EsTiburon => esTiburon;
+
+    private TiburonVisual tiburonVisual;
+    private bool embistiendo = false;
+    private bool huyendo = false;
+    private float finEmbestida = 0f;
+    private float finHuida = 0f;
+    private float proximaEmbestida = 0f;
+    private float proximoChoque = 0f;
+    private Vector3 dirHuida = Vector3.forward;
+    private static BoatController boteCache;
+
+    private NetworkVariable<Vector3> posTiburonNet = new NetworkVariable<Vector3>(
+        Vector3.zero, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+    private NetworkVariable<float> yawTiburonNet = new NetworkVariable<float>(
+        0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+    private bool posTiburonRecibida = false;
+
+    private bool EsAutoridad => !IsSpawned || IsServer;
+
     private FishAlive.FishMotion fishMotion;
     private GameObject evasiveTargetObject;
 
@@ -58,6 +103,16 @@ public class FishCube : NetworkBehaviour
         currentNetState.OnValueChanged += OnFishStateChanged;
 
         ApplyNetStateLocally(currentNetState.Value);
+
+        if (esTiburon)
+        {
+            proximaEmbestida = Time.time + 5f;
+            if (IsServer && fishMotion != null)
+            {
+                posTiburonNet.Value = fishMotion.transform.position;
+                yawTiburonNet.Value = fishMotion.transform.eulerAngles.y;
+            }
+        }
     }
 
     public override void OnNetworkDespawn()
@@ -122,11 +177,17 @@ public class FishCube : NetworkBehaviour
                 }
                 break;
         }
+
+        if (esTiburon && tiburonVisual != null)
+        {
+            tiburonVisual.SetAtacando(state == FishNetState.Fighting);
+        }
     }
 
     private void Awake()
     {
         fishMotion = GetComponentInChildren<FishAlive.FishMotion>();
+        tiburonVisual = GetComponentInChildren<TiburonVisual>(true);
     }
 
     private FishMinigameUI GetMinigameUI()
@@ -148,6 +209,8 @@ public class FishCube : NetworkBehaviour
             {
                 cachedPlayerController.isHookOccupied = false;
                 cachedPlayerController.currentRequestedGesture = FishingGesture.None;
+
+                if (esTiburon && isFighting) cachedPlayerController.CancelarBloqueoTiburon();
             }
         }
 
@@ -187,6 +250,8 @@ public class FishCube : NetworkBehaviour
                 return;
             }
 
+            if (esTiburon && ActualizarEmbestida()) return;
+
             if (!isApproaching)
             {
                 CheckForNearbyHook();
@@ -205,7 +270,10 @@ public class FishCube : NetworkBehaviour
 
                     if (distToHook <= biteDistance)
                     {
-                        StartCoroutine(EvasiveFightRoutine(targetHook, playerController.transform, playerController));
+                        if (esTiburon)
+                            StartCoroutine(TiburonMordidaRoutine(targetHook, playerController));
+                        else
+                            StartCoroutine(EvasiveFightRoutine(targetHook, playerController.transform, playerController));
                     }
                 }
             }
@@ -344,6 +412,8 @@ public class FishCube : NetworkBehaviour
 
     private void LateUpdate()
     {
+        LateUpdateSincronizar();
+
         if (timerUI != null && timerUI.gameObject.activeSelf && fishMotion != null)
         {
             Vector3 fishPos = fishMotion.transform.position;
@@ -458,6 +528,12 @@ public class FishCube : NetworkBehaviour
                             gestureDone = CheckKeyboardFallback(expectedGesture);
                     }
 
+                    if (gestureDone && BoteTambaleando())
+                    {
+                        gestureDone = false;
+                        if (playerController != null) playerController.ClearGestureWindow();
+                    }
+
                     if (gestureDone)
                     {
                         Debug.Log("[DEBUG PESCA] Gesto/R completado con exito!");
@@ -530,6 +606,292 @@ public class FishCube : NetworkBehaviour
             }
 
             EscapeAndDespawn();
+        }
+    }
+
+    private static BoatController ObtenerBote()
+    {
+        if (boteCache == null) boteCache = FindObjectOfType<BoatController>();
+        return boteCache;
+    }
+
+    private static bool BoteTambaleando()
+    {
+        BoatController bote = ObtenerBote();
+        return bote != null && bote.EstaTambaleando;
+    }
+
+    private IEnumerator TiburonMordidaRoutine(Transform hook, ThirdPController playerController)
+    {
+        if (IsServer)
+        {
+            currentNetState.Value = FishNetState.Fighting;
+        }
+        isApproaching = false;
+        isFighting = true;
+        embistiendo = false;
+        huyendo = false;
+        targetHook = hook;
+        cachedPlayerController = playerController;
+        if (playerController != null) playerController.isHookOccupied = true;
+
+        if (!EsAutoridad) yield break;
+
+        if (playerController == null)
+        {
+            isFighting = false;
+            EscapeAndDespawn();
+            yield break;
+        }
+
+        playerTransform = playerController.transform;
+
+        if (fishMotion != null) fishMotion.enabled = false;
+        if (!IsSpawned && tiburonVisual != null) tiburonVisual.SetAtacando(true);
+
+        playerController.BloquearPorTiburon(segundosBloqueo);
+        playerController.TriggerRumble(0.6f);
+        playerController.ReproducirResultadoPatron(false);
+
+        if (showDebug) Debug.LogWarning("[TIBURON] Mordio el anzuelo. Cana bloqueada.");
+
+        yield return new WaitForSeconds(1.0f);
+
+        int aciertos = 0;
+        int intentos = 0;
+
+        while (playerController != null && playerController.BloqueadoPorTiburon)
+        {
+            FishingGesture gesto = (FishingGesture)Random.Range(1, 5);
+
+            if (AnunciosUI.Instance != null) AnunciosUI.Instance.MostrarGestoRequerido(gesto, 1.5f);
+            playerController.SetRequestedGesture(gesto, aciertos, intentos);
+            playerController.TriggerRumble(0.2f);
+            MostrarMinigameUI(MinigameUIAccion.Direccion, (int)gesto);
+            playerController.ClearGestureWindow();
+
+            bool acerto = false;
+            float t = 0f;
+
+            while (t < turnDuration && !acerto && playerController != null && playerController.BloqueadoPorTiburon)
+            {
+                t += Time.deltaTime;
+
+                bool hecho = Input.GetKeyDown(KeyCode.R) || playerController.ValidateSpecificGesture(gesto);
+                if (hecho && BoteTambaleando())
+                {
+                    hecho = false;
+                    playerController.ClearGestureWindow();
+                }
+                if (hecho) acerto = true;
+
+                yield return null;
+            }
+
+            if (playerController == null) break;
+
+            intentos++;
+            if (acerto)
+            {
+                aciertos++;
+                playerController.ReducirBloqueoTiburon(segundosPorPatron);
+                playerController.ReproducirResultadoPatron(true);
+                MostrarMinigameUI(MinigameUIAccion.Feedback, 1);
+                playerController.ClearGestureWindow();
+                if (showDebug) Debug.Log($"[TIBURON] Patron correcto: -{segundosPorPatron:0.0} s.");
+            }
+            else if (playerController.BloqueadoPorTiburon)
+            {
+                playerController.ReproducirResultadoPatron(false);
+                MostrarMinigameUI(MinigameUIAccion.Feedback, 0);
+            }
+
+            playerController.SetRequestedGesture(gesto, aciertos, intentos);
+
+            yield return new WaitForSeconds(0.3f);
+        }
+
+        isFighting = false;
+
+        if (playerController != null)
+        {
+            playerController.CancelarBloqueoTiburon();
+            playerController.isHookOccupied = false;
+            playerController.currentRequestedGesture = FishingGesture.None;
+        }
+
+        if (showDebug) Debug.Log($"[TIBURON] Solto el anzuelo ({aciertos} patrones correctos).");
+
+        EscapeAndDespawn();
+    }
+
+    private bool ActualizarEmbestida()
+    {
+        if (!EsAutoridad || fishMotion == null) return false;
+
+        BoatController bote = ObtenerBote();
+        if (bote == null || !bote.MovimientoHabilitado)
+        {
+            if (embistiendo || huyendo) VolverANadar();
+            return false;
+        }
+
+        Transform t = fishMotion.transform;
+        float ahora = Time.time;
+
+        if (huyendo)
+        {
+            MoverTiburon(t, t.position + dirHuida * 10f);
+            if (ahora >= finHuida) VolverANadar();
+            return true;
+        }
+
+        if (isApproaching) return false;
+
+        float dist = bote.DistanciaHorizontalAlCasco(t.position);
+
+        if (dist <= radioChoque && ahora >= proximoChoque)
+        {
+            ChocarConBote(bote, t);
+            return true;
+        }
+
+        if (!embistiendo)
+        {
+            if (ahora < proximaEmbestida || dist > radioEmbestida) return false;
+
+            embistiendo = true;
+            finEmbestida = ahora + duracionMaxEmbestida;
+            fishMotion.enabled = false;
+            Debug.Log($"[TIBURON] Embiste al bote (estaba a {dist:0} m).");
+        }
+
+        MoverTiburon(t, bote.transform.position);
+
+        if (ahora >= finEmbestida)
+        {
+            proximaEmbestida = ahora + esperaEntreEmbestidas;
+            VolverANadar();
+        }
+        return true;
+    }
+
+    private void ChocarConBote(BoatController bote, Transform t)
+    {
+        float ahora = Time.time;
+        proximoChoque = ahora + esperaEntreEmbestidas;
+        proximaEmbestida = ahora + esperaEntreEmbestidas;
+
+        bote.Tambalear(segundosTambaleo);
+        MostrarAtaqueTiburon();
+
+        foreach (ThirdPController pc in FindObjectsOfType<ThirdPController>())
+        {
+            pc.TriggerRumble(0.6f);
+        }
+
+        embistiendo = false;
+        huyendo = true;
+        finHuida = ahora + 3f;
+        dirHuida = t.position - bote.transform.position;
+        dirHuida.y = 0f;
+        dirHuida = dirHuida.sqrMagnitude > 0.01f ? dirHuida.normalized : -t.forward;
+        fishMotion.enabled = false;
+    }
+
+    private void MoverTiburon(Transform t, Vector3 destino)
+    {
+        Vector3 dir = destino - t.position;
+        dir.y = 0f;
+        if (dir.sqrMagnitude > 0.0001f)
+        {
+            Quaternion objetivo = Quaternion.LookRotation(dir.normalized, Vector3.up);
+            t.rotation = Quaternion.RotateTowards(t.rotation, objetivo, giroEmbestida * Time.deltaTime);
+        }
+
+        Vector3 adelante = t.forward;
+        adelante.y = 0f;
+        if (adelante.sqrMagnitude > 0.0001f)
+        {
+            t.position += adelante.normalized * velocidadEmbestida * Time.deltaTime;
+        }
+    }
+
+    private void VolverANadar()
+    {
+        embistiendo = false;
+        huyendo = false;
+
+        if (fishMotion != null)
+        {
+            fishMotion.enabled = true;
+            fishMotion.target = gameObject;
+            fishMotion.SetReachMode(FishAlive.ReachMode.Wander);
+            fishMotion.PingTarget();
+        }
+    }
+
+    private void MostrarAtaqueTiburon()
+    {
+        if (tiburonVisual != null) tiburonVisual.AtacarUnaVez();
+        if (IsSpawned && IsServer) AtaqueTiburonClientRpc();
+    }
+
+    [ClientRpc]
+    private void AtaqueTiburonClientRpc()
+    {
+        if (IsServer) return; // la PC ya lo mostro localmente
+        if (tiburonVisual != null) tiburonVisual.AtacarUnaVez();
+    }
+
+    private void LateUpdateSincronizar()
+    {
+        if (fishMotion == null || isHooked) return;
+
+        bool sincronizar = esTiburon || isFighting;
+        Transform t = fishMotion.transform;
+
+        if (EsAutoridad)
+        {
+            if (esTiburon && !isFighting && !isApproaching)
+            {
+                Vector3 p = t.position;
+                p.y = transform.position.y;
+                t.position = p;
+            }
+
+            if (IsSpawned && sincronizar)
+            {
+                if ((posTiburonNet.Value - t.position).sqrMagnitude > 0.0004f) posTiburonNet.Value = t.position;
+
+                float yaw = t.eulerAngles.y;
+                if (Mathf.Abs(Mathf.DeltaAngle(yawTiburonNet.Value, yaw)) > 0.5f) yawTiburonNet.Value = yaw;
+            }
+            return;
+        }
+
+        if (!sincronizar)
+        {
+            posTiburonRecibida = false;
+            return;
+        }
+
+        if (fishMotion.enabled) fishMotion.enabled = false;
+
+        Vector3 destino = posTiburonNet.Value;
+        if (destino == Vector3.zero) return;
+
+        Quaternion rotDestino = Quaternion.Euler(0f, yawTiburonNet.Value, 0f);
+
+        if (!posTiburonRecibida || (t.position - destino).sqrMagnitude > 400f)
+        {
+            posTiburonRecibida = true;
+            t.SetPositionAndRotation(destino, rotDestino);
+        }
+        else
+        {
+            float k = 1f - Mathf.Exp(-10f * Time.deltaTime);
+            t.SetPositionAndRotation(Vector3.Lerp(t.position, destino, k), Quaternion.Slerp(t.rotation, rotDestino, k));
         }
     }
 
@@ -662,6 +1024,8 @@ public class FishCube : NetworkBehaviour
 
     public void HookMe(Transform hook, Transform player)
     {
+        if (esTiburon) return;
+
         targetHook = hook;
         playerTransform = player;
 

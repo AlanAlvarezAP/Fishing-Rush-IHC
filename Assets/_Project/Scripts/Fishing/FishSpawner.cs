@@ -15,6 +15,19 @@ public class FishSpawner : NetworkBehaviour
     public float spawnInterval = 5f;
     private float timer = 0f;
 
+    [Header("Tiburones")]
+    [Tooltip("Prefab del tiburon (lo crea el menu Fishing Rush > Crear tiburon)")]
+    public GameObject sharkPrefab;
+    [Tooltip("Probabilidad de que lo que aparece sea un tiburon en vez de un pez (0.25 = 1 de cada 4)")]
+    [Range(0f, 1f)] public float probabilidadTiburon = 0.25f;
+    [Tooltip("Maximo de tiburones vivos a la vez")]
+    public int maxTiburones = 2;
+    [Tooltip("Un tiburon nunca aparece a menos de estos metros del bote")]
+    public float distanciaMinimaTiburonAlBote = 30f;
+
+    private MenuMismaEscena menuCache;
+    private Transform boteCache;
+
     void Update()
     {
         if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening && !IsServer) return;
@@ -43,13 +56,45 @@ public class FishSpawner : NetworkBehaviour
 
         Vector3 spawnPosition = new Vector3(randomX, waterSurfaceY, randomZ);
 
-        GameObject newFish = Instantiate(fishPrefab, spawnPosition, Quaternion.identity);
+        GameObject prefab = DebeSalirTiburon(spawnPosition) ? sharkPrefab : fishPrefab;
+
+        GameObject newFish = Instantiate(prefab, spawnPosition, Quaternion.identity);
 
         NetworkObject netObj = newFish.GetComponent<NetworkObject>();
         if (netObj != null)
         {
             netObj.Spawn();
         }
+    }
+
+    private bool DebeSalirTiburon(Vector3 posicion)
+    {
+        if (sharkPrefab == null) return false;
+        if (Random.value >= probabilidadTiburon) return false;
+
+        if (menuCache == null) menuCache = FindObjectOfType<MenuMismaEscena>();
+        if (menuCache != null && !menuCache.PartidaEnCurso) return false;
+
+        int tiburones = 0;
+        foreach (FishCube pez in FindObjectsOfType<FishCube>())
+        {
+            if (pez.EsTiburon) tiburones++;
+        }
+        if (tiburones >= maxTiburones) return false;
+
+        if (boteCache == null)
+        {
+            BoatController bote = FindObjectOfType<BoatController>();
+            if (bote != null) boteCache = bote.transform;
+        }
+        if (boteCache != null)
+        {
+            Vector3 d = boteCache.position - posicion;
+            d.y = 0f;
+            if (d.magnitude < distanciaMinimaTiburonAlBote) return false;
+        }
+
+        return true;
     }
 
     public void ClearAllFish()
