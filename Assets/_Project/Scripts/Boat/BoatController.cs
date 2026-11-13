@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using TMPro;
 using UnityEngine.Rendering;
 using Unity.Netcode;
 
@@ -79,6 +80,38 @@ public class BoatController : NetworkBehaviour
     [SerializeField] private float amplitudTambaleoPescador = 3f;
     [Tooltip("Velocidad del balanceo (10 = unos 1.6 balanceos por segundo)")]
     [SerializeField] private float frecuenciaTambaleo = 10f;
+
+    [Header("Modelo del conductor (solo visual)")]
+    [SerializeField] private bool mostrarModeloConductor = true;
+    [Tooltip("Posicion del conductor dentro del bote (x: lado, y: altura del piso, z: adelante/atras). El timon esta en z = 0.35")]
+    [SerializeField] private Vector3 posicionConductorTimon = new Vector3(0f, 0.4f, -0.2f);
+    [Tooltip("Hacia donde mira el conductor (0 = hacia la proa)")]
+    [SerializeField] private float rotacionYConductor = 0f;
+    [Tooltip("Color del conductor, para distinguirlo del pescador")]
+    [SerializeField] private Color colorConductor = new Color(0.25f, 0.5f, 0.95f, 1f);
+
+    [Header("Etiquetas de jugador")]
+    [SerializeField] private bool mostrarEtiquetas = true;
+    [SerializeField] private string textoEtiquetaPescador = "P1 Pescador";
+    [SerializeField] private string textoEtiquetaConductor = "P2 Conductor";
+    [Tooltip("Metros sobre el centro del pescador")]
+    [SerializeField] private float alturaEtiquetaPescador = 1.35f;
+    [Tooltip("Metros sobre los pies del conductor")]
+    [SerializeField] private float alturaEtiquetaConductor = 2.15f;
+    [Tooltip("Tamano de letra (3 = letras de unos 30 cm)")]
+    [SerializeField] private float tamanoEtiqueta = 3f;
+    [SerializeField] private Color colorEtiquetaPescador = new Color(1f, 0.6f, 0.15f, 1f);
+    [Tooltip("La etiqueta se oculta si la camara esta a menos de estos metros (vista en primera persona)")]
+    [SerializeField] private float distanciaOcultarEtiqueta = 1.3f;
+
+    private Transform etiquetaPescador;
+    private Transform etiquetaConductor;
+    private Transform pescadorEtiquetado;
+    private float proximoIntentoEtiquetas = 0f;
+
+    private Transform modeloConductor;
+    private bool modeloConductorIntentado = false;
+    private float proximoIntentoModelo = 0f;
 
     [Header("Direccion por inclinacion (tablet del conductor)")]
     [SerializeField] private bool usarInclinacion = true;
@@ -231,28 +264,169 @@ public class BoatController : NetworkBehaviour
         }
     }
 
-    private const string VERSION_BUILD = "v12nov-E";
-    private GUIStyle estiloVersion;
-
-    private void OnGUI()
+    private void ActualizarModeloConductor()
     {
-        if (Time.realtimeSinceStartup > 40f) return;
+        if (!mostrarModeloConductor) return;
 
-        if (estiloVersion == null)
+        if (modeloConductor != null)
         {
-            estiloVersion = new GUIStyle(GUI.skin.label);
-            estiloVersion.fontSize = Mathf.Max(14, Screen.height / 28);
-            estiloVersion.normal.textColor = Color.yellow;
+            modeloConductor.localPosition = posicionConductorTimon;
+            modeloConductor.localRotation = Quaternion.Euler(0f, rotacionYConductor, 0f);
+            return;
         }
 
-        string red = IsSpawned ? (IsServer ? "servidor" : "cliente") : "sin red";
-        string rol = ConfigJugador.RolActual == TipoJugador.Jugador2_ConductorTablet ? "CONDUCTOR" : "PESCADOR";
-        GUI.Label(new Rect(12f, 8f, Screen.width - 24f, estiloVersion.fontSize * 2f),
-            "Fishing Rush " + VERSION_BUILD + " | " + rol + " | " + red, estiloVersion);
+        if (modeloConductorIntentado || Time.unscaledTime < proximoIntentoModelo) return;
+        proximoIntentoModelo = Time.unscaledTime + 1f;
+
+        ThirdPController pescador = FindObjectOfType<ThirdPController>();
+        if (pescador == null) return;
+
+        Animator origen = pescador.animator != null ? pescador.animator : pescador.GetComponentInChildren<Animator>(true);
+        if (origen == null) return;
+
+        modeloConductorIntentado = true;
+        if (origen.transform == pescador.transform) return;
+
+        GameObject almacen = new GameObject("AlmacenModeloConductor");
+        almacen.SetActive(false);
+
+        try
+        {
+            Vector3 escala = origen.transform.lossyScale;
+
+            GameObject copia = Instantiate(origen.gameObject, almacen.transform);
+            copia.name = "ModeloConductor";
+
+            for (int pasada = 0; pasada < 4; pasada++)
+            {
+                Component[] componentes = copia.GetComponentsInChildren<Component>(true);
+                for (int i = componentes.Length - 1; i >= 0; i--)
+                {
+                    Component c = componentes[i];
+                    if (c == null) continue;
+                    if (c is Transform || c is Animator || c is SkinnedMeshRenderer || c is MeshFilter) continue;
+
+                    if (c is Renderer)
+                    {
+                        if (c.transform != copia.transform && c.gameObject.activeSelf) c.gameObject.SetActive(false);
+                        continue;
+                    }
+
+                    if (c is MonoBehaviour || pasada > 0) DestroyImmediate(c);
+                }
+            }
+
+            copia.transform.SetParent(transform, false);
+            copia.transform.localPosition = posicionConductorTimon;
+            copia.transform.localRotation = Quaternion.Euler(0f, rotacionYConductor, 0f);
+            copia.transform.localScale = escala;
+            copia.SetActive(true);
+
+            Animator anim = copia.GetComponent<Animator>();
+            if (anim != null)
+            {
+                anim.applyRootMotion = false;
+                foreach (AnimatorControllerParameter p in anim.parameters)
+                {
+                    if (p.name == "isGrounded") anim.SetBool("isGrounded", true);
+                }
+            }
+
+            MaterialPropertyBlock bloque = new MaterialPropertyBlock();
+            foreach (SkinnedMeshRenderer r in copia.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            {
+                r.GetPropertyBlock(bloque);
+                bloque.SetColor("_BaseColor", colorConductor);
+                bloque.SetColor("_Color", colorConductor);
+                r.SetPropertyBlock(bloque);
+            }
+
+            modeloConductor = copia.transform;
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[BOTE] No se pudo crear el modelo del conductor: " + e.Message);
+        }
+        finally
+        {
+            Destroy(almacen);
+        }
+    }
+
+    private Transform CrearEtiqueta(string nombre, string texto, Color color)
+    {
+        GameObject go = new GameObject(nombre);
+        go.transform.SetParent(transform, false);
+
+        TextMeshPro tmp = go.AddComponent<TextMeshPro>();
+        tmp.text = texto;
+        tmp.fontSize = tamanoEtiqueta;
+        tmp.fontStyle = FontStyles.Bold;
+        tmp.color = color;
+        tmp.alignment = TextAlignmentOptions.Center;
+        tmp.enableWordWrapping = false;
+        tmp.rectTransform.sizeDelta = new Vector2(6f, 1f);
+
+        return tmp.transform;
+    }
+
+    private void ColocarEtiqueta(Transform etiqueta, Vector3 posicion, Camera cam)
+    {
+        if (etiqueta == null) return;
+
+        etiqueta.position = posicion;
+
+        bool visible = true;
+        if (cam != null)
+        {
+            etiqueta.rotation = cam.transform.rotation;
+            float d = distanciaOcultarEtiqueta;
+            visible = (cam.transform.position - posicion).sqrMagnitude > d * d;
+        }
+
+        if (etiqueta.gameObject.activeSelf != visible) etiqueta.gameObject.SetActive(visible);
+    }
+
+    private void ActualizarEtiquetas()
+    {
+        if (!mostrarEtiquetas) return;
+
+        if (etiquetaConductor == null && modeloConductor != null)
+        {
+            etiquetaConductor = CrearEtiqueta("EtiquetaConductor", textoEtiquetaConductor, colorConductor);
+        }
+
+        if (pescadorEtiquetado == null && Time.unscaledTime >= proximoIntentoEtiquetas)
+        {
+            proximoIntentoEtiquetas = Time.unscaledTime + 1f;
+            ThirdPController pescador = FindObjectOfType<ThirdPController>();
+            if (pescador != null)
+            {
+                pescadorEtiquetado = pescador.transform;
+                if (etiquetaPescador == null)
+                {
+                    etiquetaPescador = CrearEtiqueta("EtiquetaPescador", textoEtiquetaPescador, colorEtiquetaPescador);
+                }
+            }
+        }
+
+        Camera cam = CamaraActivaUtil.Buscar();
+
+        if (modeloConductor != null)
+        {
+            ColocarEtiqueta(etiquetaConductor, modeloConductor.position + Vector3.up * alturaEtiquetaConductor, cam);
+        }
+        if (pescadorEtiquetado != null)
+        {
+            ColocarEtiqueta(etiquetaPescador, pescadorEtiquetado.position + Vector3.up * alturaEtiquetaPescador, cam);
+        }
     }
 
     private void LateUpdate()
     {
+        ActualizarModeloConductor();
+        ActualizarEtiquetas();
+
         bool enVR = CamaraActivaUtil.EnVR;
         float giro = enVR ? GiroTambaleo(amplitudTambaleoPescador) : 0f;
         bool activo = Mathf.Abs(giro) > 0.001f;
