@@ -91,6 +91,9 @@ public partial class MenuMismaEscena : NetworkBehaviour
     private Quaternion jugadorRotInicial;
     private bool posicionesGuardadas = false;
 
+    [Tooltip("Donde aparece el pescador dentro del bote (cae desde esa altura). Dejar x en 0: el pasillo es angosto y con x distinto de 0 queda subido en la baranda. z entre -2 y 0")]
+    public Vector3 posicionInicialPescador = new Vector3(0f, 5.0f, -0.9f);
+
     private Button[] activeButtons;
     private int selectedButtonIndex = 0;
 
@@ -1307,7 +1310,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
             
             if (cc != null) cc.enabled = false;
 
-            playerController.transform.localPosition = new Vector3(0f, 5.0f, 0f);
+            playerController.transform.localPosition = posicionInicialPescador;
             playerController.transform.localRotation = Quaternion.identity;
 
             Physics.SyncTransforms();
