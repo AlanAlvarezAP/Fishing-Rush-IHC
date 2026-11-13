@@ -1,15 +1,5 @@
 using UnityEngine;
 
-/// <summary>
-/// NUEVO (minas). Explosion low-poly hecha por codigo (sin particulas ni assets):
-/// una esfera que crece rapido y pasa de amarillo a rojo oscuro, y luego desaparece.
-/// Uso: ExplosionSimple.Crear(posicion, materialBase);
-///
-/// OJO: 'materialBase' es obligatorio en la practica. El material por defecto de las primitivas
-/// creadas por codigo usa un shader que en las builds con URP no existe, y la esfera sale ROSA.
-/// Por eso se copia un material que ya esta en la build (el de la propia mina) y solo se le
-/// cambia el color.
-/// </summary>
 public class ExplosionSimple : MonoBehaviour
 {
     private float duracion = 0.6f;
@@ -28,7 +18,6 @@ public class ExplosionSimple : MonoBehaviour
         go.transform.position = posicion;
         go.transform.localScale = Vector3.one * 0.5f;
 
-        // Es solo visual: sin collider para no empujar ni disparar triggers
         Collider col = go.GetComponent<Collider>();
         if (col != null)
         {
@@ -47,8 +36,6 @@ public class ExplosionSimple : MonoBehaviour
         Renderer r = GetComponent<Renderer>();
         if (r != null)
         {
-            // Copia propia del material (se destruye al final). Con materialBase el shader es
-            // uno que seguro esta en la build; sin el, queda el de la primitiva (rosa en builds URP).
             if (materialBase != null)
             {
                 material = new Material(materialBase);
@@ -69,7 +56,6 @@ public class ExplosionSimple : MonoBehaviour
         tiempo += Time.deltaTime;
         float t = Mathf.Clamp01(tiempo / duracion);
 
-        // Crece rapido al inicio y frena al final
         float crecimiento = 1f - (1f - t) * (1f - t);
         transform.localScale = Vector3.one * Mathf.Lerp(0.5f, diametroFinal, crecimiento);
 
@@ -81,8 +67,8 @@ public class ExplosionSimple : MonoBehaviour
     private void PonerColor(Color color)
     {
         if (material == null) return;
-        if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color); // URP
-        if (material.HasProperty("_Color")) material.SetColor("_Color", color);         // Built-in
+        if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
+        if (material.HasProperty("_Color")) material.SetColor("_Color", color);
     }
 
     private void OnDestroy()

@@ -168,16 +168,11 @@ public class ThirdPController : NetworkBehaviour
     private float sendTimer = 0f;
     private bool hasRemoteYaw = false;
 
-    // ------------------------------------------------------------------
-    // NUEVO (tiburon): bloqueo de la cana. La PC guarda la hora de fin en una NetworkVariable,
-    // asi el celular VR y la tablet tambien saben cuanto falta (aviso rojo con cuenta atras).
-    // ------------------------------------------------------------------
     private NetworkVariable<double> finBloqueoTiburonNet = new NetworkVariable<double>(
         0d, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     );
     private float finBloqueoTiburonOffline = 0f;
 
-    /// <summary>NUEVO (tiburon): segundos que faltan para poder usar la cana otra vez (0 = libre).</summary>
     public float SegundosBloqueoTiburon
     {
         get
@@ -187,10 +182,8 @@ public class ThirdPController : NetworkBehaviour
         }
     }
 
-    /// <summary>NUEVO (tiburon): true mientras un tiburon tiene la cana bloqueada.</summary>
     public bool BloqueadoPorTiburon => SegundosBloqueoTiburon > 0f;
 
-    /// <summary>NUEVO (tiburon): bloquea la cana 'segundos'. Solo la PC (servidor).</summary>
     public void BloquearPorTiburon(float segundos)
     {
         if (IsSpawned)
@@ -205,7 +198,6 @@ public class ThirdPController : NetworkBehaviour
         Debug.Log($"[TIBURON] Cana bloqueada {segundos:0.0} s.");
     }
 
-    /// <summary>NUEVO (tiburon): un patron bien hecho le quita 'segundos' al bloqueo.</summary>
     public void ReducirBloqueoTiburon(float segundos)
     {
         if (IsSpawned)
@@ -219,7 +211,6 @@ public class ThirdPController : NetworkBehaviour
         }
     }
 
-    /// <summary>NUEVO (tiburon): quita el bloqueo (fin del tiburon o inicio de partida).</summary>
     public void CancelarBloqueoTiburon()
     {
         finBloqueoTiburonOffline = 0f;
@@ -427,7 +418,6 @@ public class ThirdPController : NetworkBehaviour
         }
 
         // --- EQUIPAR / DESEQUIPAR ---
-        // NUEVO (tiburon): con la cana bloqueada no se puede equipar ni guardar
         if ((Input.GetKeyDown(KeyCode.E) || wiiEquipTrigger) && !BloqueadoPorTiburon)
         {
             if (!isFishing)
@@ -495,7 +485,6 @@ public class ThirdPController : NetworkBehaviour
         }
 
         // --- LANZAMIENTO ---
-        // NUEVO (tiburon): con la cana bloqueada no se puede lanzar
         if ((Input.GetMouseButtonDown(0) || wiiCastTrigger) && isFishing && !alreadyCast && !isReeling && !isCastingInProcess && !BloqueadoPorTiburon)
         {
             if (Input.GetMouseButtonDown(0)) debugCalculatedForce = 25f;
@@ -507,7 +496,6 @@ public class ThirdPController : NetworkBehaviour
 
         // --- RECOGIDA ---
         bool inputReel = Input.GetKeyDown(KeyCode.Q) || wiiReelTrigger;
-        // NUEVO (tiburon): con la cana bloqueada no se puede recoger
         if (inputReel && isFishing && alreadyCast && !isReeling && !isCastingInProcess && !BloqueadoPorTiburon)
         {
             StartReeling();

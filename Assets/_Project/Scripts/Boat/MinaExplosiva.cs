@@ -2,16 +2,6 @@ using UnityEngine;
 using Unity.Netcode;
 using TMPro;
 
-/// <summary>
-/// NUEVO (minas). Mina flotante del lago.
-/// - Solo la PC (servidor) detecta el choque: es donde el bote se mueve de verdad.
-/// - Al chocar: inmoviliza el bote 'segundosInmovil', avisa a todos los dispositivos con una
-///   NetworkVariable (cada uno muestra la explosion) y un instante despues se elimina de la red.
-/// Requisitos del prefab (los crea el menu "Fishing Rush > Crear minas"):
-///   NetworkObject + Rigidbody cinematico + Collider marcado como Trigger.
-///   El Rigidbody hace falta porque los colliders del bote no tienen Rigidbody, y Unity solo
-///   dispara triggers si al menos uno de los dos objetos tiene uno.
-/// </summary>
 public class MinaExplosiva : NetworkBehaviour
 {
     [Header("Efecto sobre el bote")]
@@ -48,11 +38,10 @@ public class MinaExplosiva : NetworkBehaviour
     [SerializeField] private float distanciaAviso = 30f;
     [SerializeField] private Color colorAviso = new Color(1f, 0.15f, 0.1f);
 
-    private Transform icono;          // se crea por codigo en Start, en cada dispositivo
+    private Transform icono;
     private Camera camaraIcono;
     private static Transform boteCache;
 
-    // true cuando ya exploto: los celulares lo reciben y muestran la explosion
     private NetworkVariable<bool> explotoNet = new NetworkVariable<bool>(
         false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     );
@@ -69,13 +58,11 @@ public class MinaExplosiva : NetworkBehaviour
         base.OnNetworkSpawn();
         explotoNet.OnValueChanged += OnExplotoCambio;
 
-        // Deriva: el mismo punto de partida y la misma "semilla" en los 3 dispositivos
         origen = transform.position;
         fase = (NetworkObjectId % 360UL) * Mathf.Deg2Rad;
         sentido = (NetworkObjectId % 2UL == 0UL) ? 1f : -1f;
         origenListo = true;
 
-        // Un celular que se conecta justo cuando la mina ya exploto: no la dibuja
         if (explotoNet.Value) OcultarModelo();
     }
 
@@ -85,15 +72,11 @@ public class MinaExplosiva : NetworkBehaviour
         base.OnNetworkDespawn();
     }
 
-    // ------------------------------------------------------------------
-    // Simbolo de aviso: solo visual, cada dispositivo lo dibuja por su cuenta
-    // ------------------------------------------------------------------
-
     private void Start()
     {
         CrearIcono();
 
-        if (!origenListo) // sin red (pruebas)
+        if (!origenListo)
         {
             origen = transform.position;
             fase = Random.Range(0f, Mathf.PI * 2f);
@@ -101,9 +84,6 @@ public class MinaExplosiva : NetworkBehaviour
         }
     }
 
-    // La mina deriva en un ovalo alrededor de su punto de origen.
-    // No se manda nada por red: la posicion se calcula con el RELOJ DEL SERVIDOR, que es el mismo
-    // en la PC y en los celulares, asi que todos la ven en el mismo sitio.
     private void Update()
     {
         if (!origenListo || yaExploto || radioDeriva <= 0f || segundosPorVuelta <= 0.1f) return;
@@ -130,7 +110,6 @@ public class MinaExplosiva : NetworkBehaviour
             SpriteRenderer sr = go.AddComponent<SpriteRenderer>();
             sr.sprite = iconoAviso;
 
-            // Se escala para que mida 'tamanoIcono' metros de alto, sea cual sea el tamano de la imagen
             float altoSprite = iconoAviso.bounds.size.y;
             if (altoSprite > 0.0001f) go.transform.localScale = Vector3.one * (tamanoIcono / altoSprite);
         }
@@ -138,7 +117,7 @@ public class MinaExplosiva : NetworkBehaviour
         {
             TextMeshPro tmp = go.AddComponent<TextMeshPro>();
             tmp.text = "!";
-            tmp.fontSize = tamanoIcono * 10f; // en texto 3D, 10 de fontSize ~ 1 metro
+            tmp.fontSize = tamanoIcono * 10f;
             tmp.fontStyle = FontStyles.Bold;
             tmp.color = colorAviso;
             tmp.alignment = TextAlignmentOptions.Center;
@@ -146,9 +125,6 @@ public class MinaExplosiva : NetworkBehaviour
             tmp.rectTransform.sizeDelta = new Vector2(4f, 4f);
         }
 
-        // OJO: se guarda AL FINAL. Al agregar el texto, Unity cambia el Transform del objeto por
-        // un RectTransform; si se guardaba antes, la referencia quedaba rota y el simbolo
-        // nunca se mostraba.
         icono = go.transform;
         icono.localPosition = Vector3.up * alturaIcono;
 
@@ -186,14 +162,12 @@ public class MinaExplosiva : NetworkBehaviour
         if (icono.gameObject.activeSelf != visible) icono.gameObject.SetActive(visible);
         if (!visible) return;
 
-        // Sube y baja un poco, y siempre mira a la camara de este dispositivo
         icono.localPosition = Vector3.up * (alturaIcono + 0.15f * Mathf.Sin(Time.time * 3f));
 
         if (camaraIcono == null || !camaraIcono.isActiveAndEnabled) camaraIcono = BuscarCamara();
         if (camaraIcono != null) icono.rotation = camaraIcono.transform.rotation;
     }
 
-    // La camara con la que juega este dispositivo (se ignoran las que dibujan a una textura)
     private static Camera BuscarCamara()
     {
         Camera principal = Camera.main;
@@ -210,10 +184,8 @@ public class MinaExplosiva : NetworkBehaviour
     {
         if (yaExploto) return;
 
-        // Solo decide la PC (o el modo sin red, para pruebas)
         if (!SinRed && !(IsSpawned && IsServer)) return;
 
-        // Ignora otros triggers (anzuelo, zonas) y todo lo que no sea parte del bote (peces, etc.)
         if (other.isTrigger) return;
         BoatController bote = other.GetComponentInParent<BoatController>();
         if (bote == null) return;
@@ -228,8 +200,6 @@ public class MinaExplosiva : NetworkBehaviour
             return;
         }
 
-        // En red: primero se avisa (NetworkVariable) y un instante despues se elimina,
-        // para que el aviso llegue a los celulares antes que la orden de borrar la mina
         explotoNet.Value = true;
         Invoke(nameof(DespawnServidor), SEGUNDOS_ANTES_DE_DESPAWN);
     }
@@ -239,7 +209,6 @@ public class MinaExplosiva : NetworkBehaviour
         if (IsSpawned && IsServer) NetworkObject.Despawn(true);
     }
 
-    // Se ejecuta en la PC y en los dos celulares
     private void OnExplotoCambio(bool anterior, bool nuevo)
     {
         if (!nuevo) return;
@@ -264,19 +233,16 @@ public class MinaExplosiva : NetworkBehaviour
         ReproducirSonido();
     }
 
-    // Un material de la propia mina: su shader seguro esta incluido en la build (evita el rosa)
     private Material MaterialParaExplosion()
     {
         foreach (MeshRenderer r in GetComponentsInChildren<MeshRenderer>(true))
         {
-            if (r.transform == icono) continue; // el "!" usa el material de la fuente, no sirve
+            if (r.transform == icono) continue;
             if (r.sharedMaterial != null) return r.sharedMaterial;
         }
         return null;
     }
 
-    // Sonido 2D (se oye igual de fuerte en la PC y en los dos celulares, este donde este la camara).
-    // Va en un objeto aparte porque la mina se elimina antes de que termine el sonido.
     private void ReproducirSonido()
     {
         if (sonidoExplosion == null) return;

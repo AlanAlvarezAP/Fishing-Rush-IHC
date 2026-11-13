@@ -15,7 +15,7 @@ public class FishSpawner : NetworkBehaviour
     public float spawnInterval = 5f;
     private float timer = 0f;
 
-    [Header("Tiburones (NUEVO)")]
+    [Header("Tiburones")]
     [Tooltip("Prefab del tiburon (lo crea el menu Fishing Rush > Crear tiburon)")]
     public GameObject sharkPrefab;
     [Tooltip("Probabilidad de que lo que aparece sea un tiburon en vez de un pez (0.25 = 1 de cada 4)")]
@@ -56,7 +56,6 @@ public class FishSpawner : NetworkBehaviour
 
         Vector3 spawnPosition = new Vector3(randomX, waterSurfaceY, randomZ);
 
-        // NUEVO (tiburon): a veces, en vez de un pez, aparece un tiburon
         GameObject prefab = DebeSalirTiburon(spawnPosition) ? sharkPrefab : fishPrefab;
 
         GameObject newFish = Instantiate(prefab, spawnPosition, Quaternion.identity);
@@ -68,8 +67,6 @@ public class FishSpawner : NetworkBehaviour
         }
     }
 
-    // NUEVO (tiburon): solo durante la partida (no en el menu ni en el tutorial), con un maximo
-    // de tiburones vivos y nunca pegado al bote.
     private bool DebeSalirTiburon(Vector3 posicion)
     {
         if (sharkPrefab == null) return false;

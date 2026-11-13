@@ -34,16 +34,12 @@ public class BoatController : NetworkBehaviour
         Quaternion.identity, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     );
 
-    // NUEVO (minas): hora del servidor en la que termina la inmovilizacion (0 = no esta inmovilizado).
-    // Al ser NetworkVariable, el celular conductor tambien sabe cuanto falta (para su aviso).
     private NetworkVariable<double> finInmovilNet = new NetworkVariable<double>(
         0d, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     );
 
-    // NUEVO (minas): lo mismo pero sin red (pruebas offline), en Time.time
     private float finInmovilOffline = 0f;
 
-    /// <summary>NUEVO (minas): segundos que faltan para que el bote pueda moverse otra vez (0 = libre).</summary>
     public float SegundosInmovilRestantes
     {
         get
@@ -53,14 +49,10 @@ public class BoatController : NetworkBehaviour
         }
     }
 
-    /// <summary>NUEVO (minas): true mientras el bote esta inmovilizado por una mina.</summary>
     public bool EstaInmovilizado => SegundosInmovilRestantes > 0f;
 
-    /// <summary>NUEVO (minas): deja el bote quieto durante 'segundos'. Solo lo decide la PC (servidor).</summary>
     public void Inmovilizar(float segundos)
     {
-        // OJO: no se borra inputRemoto. El celular solo manda su input cuando cambia; si el
-        // conductor sigue con el boton apretado, el bote arranca solo al terminar la mina.
         if (IsSpawned)
         {
             if (!IsServer) return;
@@ -74,17 +66,12 @@ public class BoatController : NetworkBehaviour
         Debug.Log($"[MINA] Bote inmovilizado {segundos:0.0} s.");
     }
 
-    /// <summary>NUEVO (minas): quita la inmovilizacion (al empezar o reiniciar la partida).</summary>
     public void CancelarInmovilizacion()
     {
         finInmovilOffline = 0f;
         if (IsSpawned && IsServer) finInmovilNet.Value = 0d;
     }
 
-    // ------------------------------------------------------------------
-    // NUEVO (tiburon): tambaleo. Mismo patron que la mina: la PC guarda la hora de fin en una
-    // NetworkVariable y cada dispositivo calcula su efecto por su cuenta.
-    // ------------------------------------------------------------------
     [Header("Tambaleo (choque de tiburon)")]
     [Tooltip("Grados que se inclina la camara del conductor al inicio del tambaleo")]
     [SerializeField] private float amplitudTambaleo = 6f;
@@ -93,10 +80,6 @@ public class BoatController : NetworkBehaviour
     [Tooltip("Velocidad del balanceo (10 = unos 1.6 balanceos por segundo)")]
     [SerializeField] private float frecuenciaTambaleo = 10f;
 
-    // ------------------------------------------------------------------
-    // NUEVO: direccion por inclinacion de la tablet (como un volante). Los pads siguen sirviendo:
-    // adelante/atras siempre van por pad, e izquierda/derecha por pad tienen prioridad sobre la inclinacion.
-    // ------------------------------------------------------------------
     [Header("Direccion por inclinacion (tablet del conductor)")]
     [SerializeField] private bool usarInclinacion = true;
     [Tooltip("Inclinacion que se ignora (0.12 = unos 7 grados), para que el bote no gire solo")]
@@ -107,8 +90,6 @@ public class BoatController : NetworkBehaviour
     [SerializeField] private bool invertirInclinacion = false;
 
     private float proximoEnvioInput = 0f;
-    // Puede haber mas de un jugador (ThirdPController) en la escena: se inclinan TODOS sus
-    // "CameraOffset", asi no importa cual es el que esta mirando este dispositivo.
     private Transform[] camarasPescador = new Transform[0];
     private Quaternion[] rotBasePescador = new Quaternion[0];
     private float proximaBusquedaPescador = 0f;
@@ -123,10 +104,8 @@ public class BoatController : NetworkBehaviour
     private bool camaraBuscada = false;
     private Collider[] collidersCasco;
 
-    /// <summary>NUEVO (tiburon): true durante la partida (el bote puede moverse).</summary>
     public bool MovimientoHabilitado => movimientoHabilitado;
 
-    /// <summary>NUEVO (tiburon): segundos de tambaleo que quedan (0 = estable).</summary>
     public float SegundosTambaleoRestantes
     {
         get
@@ -136,10 +115,8 @@ public class BoatController : NetworkBehaviour
         }
     }
 
-    /// <summary>NUEVO (tiburon): true mientras el bote se tambalea (los patrones del pescador no cuentan).</summary>
     public bool EstaTambaleando => SegundosTambaleoRestantes > 0f;
 
-    /// <summary>NUEVO (tiburon): hace tambalear el bote 'segundos'. Solo lo decide la PC (servidor).</summary>
     public void Tambalear(float segundos)
     {
         if (IsSpawned)
@@ -155,7 +132,6 @@ public class BoatController : NetworkBehaviour
         Debug.Log($"[TIBURON] Choque con el bote: tambaleo {segundos:0.0} s.");
     }
 
-    /// <summary>NUEVO (tiburon): quita el tambaleo (al empezar o reiniciar la partida).</summary>
     public void CancelarTambaleo()
     {
         finTambaleoOffline = 0f;
@@ -163,14 +139,11 @@ public class BoatController : NetworkBehaviour
     }
 
     /// <summary>
-    /// NUEVO (tiburon): distancia en el plano del agua (se ignora la altura) entre un punto y el
-    /// casco del bote. 0 = el punto esta debajo o dentro del casco.
     /// </summary>
     public float DistanciaHorizontalAlCasco(Vector3 punto)
     {
         if (collidersCasco == null)
         {
-            // Los colliders solidos del bote, sin contar los del pescador que va encima
             var lista = new System.Collections.Generic.List<Collider>();
             foreach (BoxCollider c in GetComponentsInChildren<BoxCollider>())
             {
@@ -204,17 +177,6 @@ public class BoatController : NetworkBehaviour
         return mejor;
     }
 
-    // ------------------------------------------------------------------
-    // NUEVO (tiburon): balanceo visual. No se toca el bote ni sus colliders (el pescador va encima).
-    //
-    // Pantalla normal (PC y tablet): la camara se inclina JUSTO ANTES de dibujarse y se devuelve a
-    // su sitio justo despues. Asi funciona con cualquier camara, la mueva quien la mueva: la del
-    // conductor (BoatCamera) y la del pescador en la PC, que es "Main Camera" en tercera persona
-    // y la controla Cinemachine (por eso inclinarla en LateUpdate no servia: Cinemachine la pisaba).
-    //
-    // Celular VR: la rotacion de la camara la pone el visor, asi que se inclina su padre
-    // ("CameraOffset") en LateUpdate.
-    // ------------------------------------------------------------------
     private readonly Dictionary<Camera, Quaternion> rotacionesGuardadas = new Dictionary<Camera, Quaternion>();
 
     private void OnEnable()
@@ -229,13 +191,11 @@ public class BoatController : NetworkBehaviour
         RenderPipelineManager.endCameraRendering -= DespuesDeDibujarCamara;
     }
 
-    // Grados de inclinacion en este instante (0 si no hay tambaleo)
     private float GiroTambaleo(float amplitud)
     {
         float restante = SegundosTambaleoRestantes;
         if (restante <= 0f) return 0f;
 
-        // Empieza fuerte y se va calmando en el ultimo segundo y medio
         float fuerza = Mathf.Clamp01(restante / 1.5f);
         return amplitud * fuerza * Mathf.Sin(Time.time * frecuenciaTambaleo);
     }
@@ -243,12 +203,12 @@ public class BoatController : NetworkBehaviour
     private void AntesDeDibujarCamara(ScriptableRenderContext contexto, Camera cam)
     {
         if (cam == null || CamaraActivaUtil.EnVR) return;
-        if (cam.cameraType != CameraType.Game || cam.targetTexture != null) return; // ni reflejos ni la del Wiimote
+        if (cam.cameraType != CameraType.Game || cam.targetTexture != null) return;
 
         if (!camaraBuscada)
         {
             camaraBuscada = true;
-            camaraTambaleo = transform.Find("BoatCamera"); // la del conductor
+            camaraTambaleo = transform.Find("BoatCamera");
         }
 
         bool esDelConductor = camaraTambaleo != null && cam.transform == camaraTambaleo;
@@ -271,15 +231,32 @@ public class BoatController : NetworkBehaviour
         }
     }
 
-    // Solo para el celular VR
+    private const string VERSION_BUILD = "v12nov-E";
+    private GUIStyle estiloVersion;
+
+    private void OnGUI()
+    {
+        if (Time.realtimeSinceStartup > 40f) return;
+
+        if (estiloVersion == null)
+        {
+            estiloVersion = new GUIStyle(GUI.skin.label);
+            estiloVersion.fontSize = Mathf.Max(14, Screen.height / 28);
+            estiloVersion.normal.textColor = Color.yellow;
+        }
+
+        string red = IsSpawned ? (IsServer ? "servidor" : "cliente") : "sin red";
+        string rol = ConfigJugador.RolActual == TipoJugador.Jugador2_ConductorTablet ? "CONDUCTOR" : "PESCADOR";
+        GUI.Label(new Rect(12f, 8f, Screen.width - 24f, estiloVersion.fontSize * 2f),
+            "Fishing Rush " + VERSION_BUILD + " | " + rol + " | " + red, estiloVersion);
+    }
+
     private void LateUpdate()
     {
         bool enVR = CamaraActivaUtil.EnVR;
         float giro = enVR ? GiroTambaleo(amplitudTambaleoPescador) : 0f;
         bool activo = Mathf.Abs(giro) > 0.001f;
 
-        // La lista se refresca cada segundo, pero nunca en mitad de un tambaleo (para no guardar
-        // como "rotacion normal" una rotacion ya inclinada)
         if (enVR && !activo && !tambaleoPescadorAplicado && Time.unscaledTime >= proximaBusquedaPescador)
         {
             proximaBusquedaPescador = Time.unscaledTime + 1f;
@@ -346,7 +323,6 @@ public class BoatController : NetworkBehaviour
         if (!offline && !IsServer && IsSpawned && ConfigJugador.RolActual == TipoJugador.Jugador2_ConductorTablet)
         {
             Vector2 inputTablet = ReadInput();
-            // NUEVO: como mucho ~16 envios por segundo (la inclinacion cambia en cada frame)
             if ((inputTablet - ultimoInputEnviado).sqrMagnitude > 0.0001f && Time.unscaledTime >= proximoEnvioInput)
             {
                 proximoEnvioInput = Time.unscaledTime + 0.06f;
@@ -357,7 +333,7 @@ public class BoatController : NetworkBehaviour
 
         if (IsServer || offline)
         {
-            if (movimientoHabilitado && !EstaInmovilizado) // NUEVO (minas): quieto mientras dure la mina
+            if (movimientoHabilitado && !EstaInmovilizado)
             {
                 // Input del conductor remoto; sin red (pruebas) se usa el tactil local
                 Vector2 input = inputRemoto.sqrMagnitude > 0.0001f ? inputRemoto : ReadInput();
@@ -380,23 +356,18 @@ public class BoatController : NetworkBehaviour
 
     private Vector2 ReadInput()
     {
-        // Pads: adelante/atras (y) e izquierda/derecha (x)
         Vector2 pads = Vector2.zero;
         if (UIBoteInput.InputTactil.sqrMagnitude > 0.01f)
         {
             pads = UIBoteInput.InputTactil.normalized;
         }
 
-        // NUEVO: si no se esta tocando izquierda/derecha, la direccion sale de inclinar la tablet
         float giro = pads.x;
         if (Mathf.Abs(pads.x) < 0.1f) giro = LeerInclinacion();
 
         return new Vector2(giro, pads.y);
     }
 
-    // Devuelve de -1 (todo a la izquierda) a 1 (todo a la derecha), en pasos de 0.05.
-    // Usa el acelerometro: al inclinar la tablet como un volante, la gravedad se reparte hacia
-    // un lado de la pantalla. Solo en la tablet del conductor; en la PC siempre da 0.
     private float LeerInclinacion()
     {
         if (!usarInclinacion) return 0f;
@@ -442,8 +413,8 @@ public class BoatController : NetworkBehaviour
     public void SnapTo(Vector3 pos, Quaternion rot)
     {
         inputRemoto = Vector2.zero;
-        CancelarInmovilizacion(); // NUEVO (minas): cada partida empieza con el bote libre
-        CancelarTambaleo();       // NUEVO (tiburon)
+        CancelarInmovilizacion();
+        CancelarTambaleo();
         transform.SetPositionAndRotation(pos, rot);
         Physics.SyncTransforms();
         if (IsServer && IsSpawned) { netBoatPos.Value = pos; netBoatRot.Value = rot; }

@@ -2,14 +2,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
 
-/// <summary>
-/// NUEVO (minas). Coloca las minas del lago. Misma idea que FishSpawner, pero:
-/// - Solo actua en la PC (servidor). Es un MonoBehaviour normal: no necesita NetworkObject,
-///   las que viajan por red son las minas (cada una tiene su NetworkObject).
-/// - Solo hay minas durante la partida: Reiniciar() las coloca y ClearAll() las quita
-///   (los llama MenuMismaEscena).
-/// - Nunca pone una mina cerca del bote, ni pegada a otra mina, ni sobre tierra.
-/// </summary>
 public class MinaSpawner : MonoBehaviour
 {
     public GameObject minaPrefab;
@@ -39,7 +31,6 @@ public class MinaSpawner : MonoBehaviour
     private static bool SinRed =>
         NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening;
 
-    // La PC en red, o cualquier dispositivo sin red (pruebas)
     private static bool PuedeSpawnear => SinRed || NetworkManager.Singleton.IsServer;
 
     private void Update()
@@ -58,7 +49,6 @@ public class MinaSpawner : MonoBehaviour
         }
     }
 
-    /// <summary>Quita las minas viejas y coloca todas las nuevas (inicio de partida).</summary>
     public void Reiniciar()
     {
         if (!PuedeSpawnear) return;
@@ -72,7 +62,6 @@ public class MinaSpawner : MonoBehaviour
         Debug.Log($"[MINA] {minas.Count} minas colocadas en el lago.");
     }
 
-    /// <summary>Quita todas las minas y deja de reponerlas (menu / fin de partida).</summary>
     public void ClearAll()
     {
         activo = false;
@@ -93,7 +82,7 @@ public class MinaSpawner : MonoBehaviour
     {
         if (minaPrefab == null) return;
 
-        if (!BuscarPosicionLibre(out Vector3 pos)) return; // no hubo sitio: se reintenta luego
+        if (!BuscarPosicionLibre(out Vector3 pos)) return;
 
         GameObject mina = Instantiate(minaPrefab, pos, Quaternion.Euler(0f, Random.Range(0f, 360f), 0f));
 
@@ -143,11 +132,10 @@ public class MinaSpawner : MonoBehaviour
         return false;
     }
 
-    // true si el fondo del lago (terreno) esta bastante por debajo de la mina
     private bool HayAguaSuficiente(Vector3 pos)
     {
         Terrain terreno = Terrain.activeTerrain;
-        if (terreno == null) return true; // sin terreno no se puede comprobar: se acepta
+        if (terreno == null) return true;
 
         float alturaFondo = terreno.transform.position.y + terreno.SampleHeight(pos);
         return alturaFondo < alturaMina - profundidadMinima;

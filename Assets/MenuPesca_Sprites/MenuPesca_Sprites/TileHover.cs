@@ -26,9 +26,13 @@ public class TileHover : MonoBehaviour,
     private Vector3 initialScale;
     private Image tileImage;
     private Color targetColor;
+    private bool inicializado = false;
 
-    void Start()
+    private void Inicializar()
     {
+        if (inicializado) return;
+        inicializado = true;
+
         initialScale = transform.localScale;
         targetScale = initialScale;
 
@@ -43,6 +47,22 @@ public class TileHover : MonoBehaviour,
             outlineObject.SetActive(false);
     }
 
+    void Awake()
+    {
+        Inicializar();
+    }
+
+    void OnDisable()
+    {
+        if (!inicializado) return;
+
+        targetScale = initialScale;
+        targetColor = normalColor;
+        transform.localScale = initialScale;
+        if (useColorTint && tileImage != null) tileImage.color = normalColor;
+        if (outlineObject != null) outlineObject.SetActive(false);
+    }
+
     void Update()
     {
         transform.localScale = Vector3.Lerp(transform.localScale, targetScale, Time.unscaledDeltaTime * animSpeed);
@@ -55,6 +75,7 @@ public class TileHover : MonoBehaviour,
 
     public void ActivarHover()
     {
+        Inicializar();
         targetScale = initialScale * hoverScale;
         targetColor = hoverColor;
 
@@ -65,6 +86,7 @@ public class TileHover : MonoBehaviour,
     // --- DESACTIVAR HOVER ---
     public void DesactivarHover()
     {
+        Inicializar();
         targetScale = initialScale;
         targetColor = normalColor;
 
@@ -72,9 +94,32 @@ public class TileHover : MonoBehaviour,
             outlineObject.SetActive(false);
     }
 
+    private bool EstaSeleccionado()
+    {
+        return EventSystem.current != null && EventSystem.current.currentSelectedGameObject == gameObject;
+    }
+
     // Eventos de Mouse
-    public void OnPointerEnter(PointerEventData eventData) => ActivarHover();
-    public void OnPointerExit(PointerEventData eventData) => DesactivarHover();
+    public void OnPointerEnter(PointerEventData eventData)
+    {
+        if (eventData != null && eventData.delta.sqrMagnitude < 0.01f) return;
+
+        Selectable seleccionable = GetComponent<Selectable>();
+        if (seleccionable != null && seleccionable.IsInteractable() && EventSystem.current != null)
+        {
+            EventSystem.current.SetSelectedGameObject(gameObject);
+        }
+        else
+        {
+            ActivarHover();
+        }
+    }
+
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        if (EstaSeleccionado()) return;
+        DesactivarHover();
+    }
 
     // Eventos de Wiimote / Teclado (Cuando el script MenuMismaEscena ejecuta .Select())
     public void OnSelect(BaseEventData eventData) => ActivarHover();
@@ -83,9 +128,14 @@ public class TileHover : MonoBehaviour,
     // Clics
     public void OnPointerDown(PointerEventData eventData)
     {
+        Inicializar();
         targetScale = initialScale * pressScale;
         targetColor = pressColor;
     }
 
-    public void OnPointerUp(PointerEventData eventData) => ActivarHover();
+    public void OnPointerUp(PointerEventData eventData)
+    {
+        if (EstaSeleccionado()) ActivarHover();
+        else DesactivarHover();
+    }
 }

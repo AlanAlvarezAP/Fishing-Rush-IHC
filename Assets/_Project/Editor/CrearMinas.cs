@@ -5,20 +5,6 @@ using UnityEditor.SceneManagement;
 using TMPro;
 using Unity.Netcode;
 
-/// <summary>
-/// Herramienta de editor (no va en las builds).
-/// Menu de Unity:  Fishing Rush > Crear minas
-///
-/// Con la escena Main abierta, crea todo lo que las minas necesitan fuera del codigo:
-///   1. Prefab  Assets/_Project/Prefabs/Mina.prefab  (esfera con puas, hecha con primitivas):
-///        NetworkObject + Rigidbody cinematico + CapsuleCollider Trigger + MinaExplosiva.
-///   2. Lo registra en la lista de Network Prefabs del NetworkManager (si no estaba ya).
-///   3. Objeto "MinaSpawner" en la escena, con el prefab y el mismo tamano de lago del FishSpawner.
-///   4. "Aviso_BoteInmovil" dentro de Canvas_Boat (pantalla roja + cuenta atras del conductor).
-///
-/// Se puede ejecutar mas de una vez: lo que ya existe no se duplica.
-/// Lo creado en la escena se deshace con Ctrl+Z (el prefab y los materiales se borran a mano).
-/// </summary>
 public static class CrearMinas
 {
     private const string TITULO = "Crear minas";
@@ -51,9 +37,6 @@ public static class CrearMinas
 
         string resumen = "";
 
-        // =========================================================
-        // 1. PREFAB DE LA MINA
-        // =========================================================
         GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(RUTA_PREFAB);
         if (prefab == null)
         {
@@ -71,17 +54,11 @@ public static class CrearMinas
             return;
         }
 
-        // =========================================================
-        // 2. NETWORK PREFABS
-        // =========================================================
         resumen += "- " + RegistrarEnNetworkPrefabs(prefab) + "\n";
 
         Undo.SetCurrentGroupName(TITULO);
         int grupoUndo = Undo.GetCurrentGroup();
 
-        // =========================================================
-        // 3. MINASPAWNER EN LA ESCENA
-        // =========================================================
         MinaSpawner minaSpawner = Object.FindObjectOfType<MinaSpawner>(true);
         if (minaSpawner == null)
         {
@@ -89,7 +66,6 @@ public static class CrearMinas
             Undo.RegisterCreatedObjectUndo(go, "Crear " + NOMBRE_SPAWNER);
             minaSpawner = go.AddComponent<MinaSpawner>();
 
-            // Mismo lago que el de los peces
             FishSpawner fishSpawner = Object.FindObjectOfType<FishSpawner>(true);
             if (fishSpawner != null)
             {
@@ -110,9 +86,6 @@ public static class CrearMinas
             EditorUtility.SetDirty(minaSpawner);
         }
 
-        // =========================================================
-        // 4. AVISO DEL CONDUCTOR (dentro de Canvas_Boat)
-        // =========================================================
         AvisoBoteInmovil aviso = Object.FindObjectOfType<AvisoBoteInmovil>(true);
         if (aviso != null)
         {
@@ -138,10 +111,6 @@ public static class CrearMinas
             "En el objeto MinaSpawner puedes ajustar cuantas minas hay y a que altura flotan.", "OK");
     }
 
-    // ---------------------------------------------------------------------
-    // Prefab
-    // ---------------------------------------------------------------------
-
     private static GameObject CrearPrefabMina()
     {
         AsegurarCarpeta(CARPETA_PREFABS);
@@ -152,10 +121,8 @@ public static class CrearMinas
 
         GameObject raiz = new GameObject("Mina");
 
-        // Cuerpo: esfera de 1.2 m
         CrearEsferaVisual("Cuerpo", raiz.transform, Vector3.zero, 1.2f, matCuerpo);
 
-        // Puas rojas: arriba, 4 a los lados y 4 en diagonal hacia arriba (las de abajo no se verian)
         Vector3[] direcciones =
         {
             Vector3.up,
@@ -167,15 +134,13 @@ public static class CrearMinas
             CrearEsferaVisual("Pua_" + i, raiz.transform, direcciones[i].normalized * 0.62f, 0.28f, matPuas);
         }
 
-        // Fisica: trigger alto (capsula vertical) para que choque con el casco del bote aunque
-        // luego subas o bajes la mina. Rigidbody cinematico: necesario para que salte el trigger.
         Rigidbody rb = raiz.AddComponent<Rigidbody>();
         rb.isKinematic = true;
         rb.useGravity = false;
 
         CapsuleCollider trigger = raiz.AddComponent<CapsuleCollider>();
         trigger.isTrigger = true;
-        trigger.direction = 1; // eje Y
+        trigger.direction = 1;
         trigger.radius = 0.9f;
         trigger.height = 6f;
         trigger.center = Vector3.zero;
@@ -199,7 +164,6 @@ public static class CrearMinas
         esfera.transform.localPosition = posLocal;
         esfera.transform.localScale = Vector3.one * diametro;
 
-        // Solo visual: el unico collider de la mina es el trigger de la raiz
         Collider col = esfera.GetComponent<Collider>();
         if (col != null) Object.DestroyImmediate(col);
 
@@ -236,14 +200,6 @@ public static class CrearMinas
         AssetDatabase.CreateFolder(padre, nombre);
     }
 
-    // ---------------------------------------------------------------------
-    // Network Prefabs
-    // ---------------------------------------------------------------------
-
-    /// <summary>
-    /// Agrega el prefab a la primera lista de Network Prefabs del NetworkManager de la escena.
-    /// Se hace por SerializedObject (como lo haria el Inspector). Devuelve una linea para el resumen.
-    /// </summary>
     private static string RegistrarEnNetworkPrefabs(GameObject prefab)
     {
         const string MANUAL = "OJO: registra tu el prefab Mina a mano: NetworkManager > Network Prefabs Lists > abre la lista > '+'";
@@ -290,7 +246,6 @@ public static class CrearMinas
         if (pPrefab == null) return "No se pudo escribir en la lista de Network Prefabs. " + MANUAL;
         pPrefab.objectReferenceValue = prefab;
 
-        // El elemento nuevo se crea copiando el anterior: se limpian sus otros campos
         SerializedProperty pOverride = nuevo.FindPropertyRelative("Override");
         if (pOverride != null) pOverride.intValue = 0;
         SerializedProperty pSource = nuevo.FindPropertyRelative("SourcePrefabToOverride");
@@ -307,21 +262,15 @@ public static class CrearMinas
         return "Prefab registrado en Network Prefabs (" + primeraLista.name + ")";
     }
 
-    // ---------------------------------------------------------------------
-    // Aviso del conductor
-    // ---------------------------------------------------------------------
-
     private static AvisoBoteInmovil CrearAviso(Transform canvas, TMP_Text estilo)
     {
-        // Contenedor siempre activo (lleva el script) a pantalla completa
         GameObject contenedor = new GameObject(NOMBRE_AVISO, typeof(RectTransform));
         Undo.RegisterCreatedObjectUndo(contenedor, "Crear " + NOMBRE_AVISO);
         contenedor.transform.SetParent(canvas, false);
-        contenedor.transform.SetAsLastSibling(); // se dibuja encima de los botones
+        contenedor.transform.SetAsLastSibling();
         contenedor.layer = canvas.gameObject.layer;
         Estirar((RectTransform)contenedor.transform, Vector2.zero, Vector2.one);
 
-        // Panel rojo semitransparente: NO bloquea los toques (raycastTarget apagado)
         GameObject panel = new GameObject("Panel", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         panel.transform.SetParent(contenedor.transform, false);
         panel.layer = contenedor.layer;
@@ -331,7 +280,6 @@ public static class CrearMinas
         fondo.color = new Color(0.85f, 0.05f, 0.05f, 0.30f);
         fondo.raycastTarget = false;
 
-        // Texto en la parte de arriba, para no tapar los botones del bote
         GameObject goTexto = new GameObject("Texto", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
         goTexto.transform.SetParent(panel.transform, false);
         goTexto.layer = panel.layer;
@@ -370,7 +318,6 @@ public static class CrearMinas
         rt.localScale = Vector3.one;
     }
 
-    /// <summary>Toma la fuente de algun texto del menu para que el aviso tenga el mismo estilo.</summary>
     private static TMP_Text BuscarEstiloTexto(MenuMismaEscena menu)
     {
         GameObject[] candidatos = { menu.canvasMenuConductor, menu.canvasMenu, menu.canvasGameHUD };

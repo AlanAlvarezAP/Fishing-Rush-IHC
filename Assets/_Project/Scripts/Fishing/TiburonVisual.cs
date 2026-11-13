@@ -1,14 +1,5 @@
 using UnityEngine;
 
-/// <summary>
-/// NUEVO (tiburon). Controla las animaciones del modelo del tiburon (asset "3D shark").
-/// Va en el objeto del modelo, dentro del prefab Tiburon.
-/// - Normalmente reproduce la animacion de nado (es el estado por defecto del Animator).
-/// - SetAtacando(true): repite la animacion de ataque (mientras muerde el anzuelo).
-/// - AtacarUnaVez(): un solo ataque (cuando choca el bote).
-/// No usa los parametros del Animator: cambia de estado por nombre, que es mas directo.
-/// Solo es visual: cada dispositivo lo ejecuta por su cuenta.
-/// </summary>
 public class TiburonVisual : MonoBehaviour
 {
     public Animator animator;
@@ -37,7 +28,7 @@ public class TiburonVisual : MonoBehaviour
     public void AtacarUnaVez()
     {
         finAtaqueUnico = Time.time + duracionAtaque;
-        proximoCiclo = 0f; // empieza ya
+        proximoCiclo = 0f;
     }
 
     private void Update()

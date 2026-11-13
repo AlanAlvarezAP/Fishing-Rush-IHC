@@ -47,13 +47,6 @@ public class AnunciosUI : MonoBehaviour
         if (imgGestoCentral != null) imgGestoCentral.gameObject.SetActive(false);
     }
 
-    // ------------------------------------------------------------------
-    // NUEVO: el canvas del HUD (este mismo objeto) esta atado a la camara de PRIMERA persona.
-    // En la PC se juega en tercera persona y esa camara esta apagada, y un canvas atado a una
-    // camara apagada no se dibuja: por eso en la PC no se veia ni el gesto ni el resto del HUD.
-    // Cada medio segundo se comprueba; si su camara esta apagada, se ata a la que este encendida.
-    // (Es lo mismo que ya hace FishingHUDManager con su canvas.)
-    // ------------------------------------------------------------------
     private Canvas canvasHUD;
     private Camera camaraOriginalHUD;
     private bool canvasHUDBuscado = false;
@@ -73,7 +66,6 @@ public class AnunciosUI : MonoBehaviour
 
         if (canvasHUD == null || canvasHUD.renderMode != RenderMode.ScreenSpaceCamera) return;
 
-        // Se prefiere su camara original (primera persona) siempre que este encendida
         Camera deseada = CamaraActivaUtil.Buscar(camaraOriginalHUD);
         if (deseada != null && canvasHUD.worldCamera != deseada) canvasHUD.worldCamera = deseada;
     }
@@ -105,16 +97,11 @@ public class AnunciosUI : MonoBehaviour
         rutinaAnuncio = StartCoroutine(RutinaMostrarGesto(spriteGesto, duracion));
     }
 
-    // CORREGIDO: en la escena la imagen del gesto es HIJA de 'tileAnuncios'. Antes aqui se apagaba
-    // el tile y luego se encendia la imagen, pero una hija de un objeto apagado no se dibuja, asi
-    // que el gesto nunca se veia. Ahora, si la imagen esta dentro del tile, el tile se enciende y
-    // lo que se apaga es solo el recuadro del texto.
     private bool GestoDentroDelTile =>
         tileAnuncios != null && imgGestoCentral != null &&
         imgGestoCentral.transform != tileAnuncios.transform &&
         imgGestoCentral.transform.IsChildOf(tileAnuncios.transform);
 
-    // El hijo directo del tile que contiene el texto (el recuadro de victoria/derrota)
     private GameObject RecuadroTexto()
     {
         if (tileAnuncios == null || txtAnuncio == null) return null;
@@ -131,7 +118,6 @@ public class AnunciosUI : MonoBehaviour
 
         if (dentro)
         {
-            // Tile encendido (para que su hija se vea), recuadro de texto apagado
             GameObject recuadro = RecuadroTexto();
             if (recuadro != null) recuadro.SetActive(false);
             tileAnuncios.SetActive(true);
@@ -176,7 +162,6 @@ public class AnunciosUI : MonoBehaviour
             txtAnuncio.gameObject.SetActive(true);
         }
 
-        // CORREGIDO: el recuadro que contiene el texto tambien tiene que estar encendido
         GameObject recuadro = RecuadroTexto();
         if (recuadro != null) recuadro.SetActive(true);
 

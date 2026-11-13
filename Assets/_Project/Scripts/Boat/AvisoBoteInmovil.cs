@@ -1,12 +1,6 @@
 using UnityEngine;
 using TMPro;
 
-/// <summary>
-/// NUEVO (minas). Aviso del conductor: pantalla roja + "Conduccion inhabilitada 4.2 s" mientras
-/// el bote esta inmovilizado por una mina.
-/// Va en un objeto SIEMPRE activo dentro de Canvas_Boat; lo que se enciende y apaga es 'panel'.
-/// No usa RPCs: lee BoatController.SegundosInmovilRestantes, que sale de una NetworkVariable.
-/// </summary>
 public class AvisoBoteInmovil : MonoBehaviour
 {
     [Tooltip("Hijo con el fondo rojo y el texto (se enciende solo mientras dure la mina)")]

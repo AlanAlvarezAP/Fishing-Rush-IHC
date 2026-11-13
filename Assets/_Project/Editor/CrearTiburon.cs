@@ -6,22 +6,6 @@ using UnityEditor.SceneManagement;
 using TMPro;
 using Unity.Netcode;
 
-/// <summary>
-/// Herramienta de editor (no va en las builds).
-/// Menu de Unity:  Fishing Rush > Crear tiburon
-///
-/// Con la escena Main abierta, crea todo lo que el tiburon necesita fuera del codigo:
-///   1. Prefab  Assets/_Project/Prefabs/Tiburon.prefab : copia del prefab del pez (el que usa el
-///      FishSpawner), con 'esTiburon' marcado, el pez payaso oculto (se queda como "motor" del
-///      nado) y el modelo del asset "3D shark" encima, escalado a unos 3.5 m.
-///   2. Lo registra en Network Prefabs y COMPRUEBA que quedo guardado en el disco.
-///   3. Lo asigna en FishSpawner (campo Shark Prefab).
-///   4. Avisos en pantalla: "Aviso_Peligro_Pescador" (Canvas_GameHUD) y
-///      "Aviso_Peligro_Conductor" (Canvas_Boat).
-///
-/// Se puede ejecutar mas de una vez: lo que ya existe no se duplica.
-/// Para rehacer el prefab, borra Tiburon.prefab y vuelve a ejecutar.
-/// </summary>
 public static class CrearTiburon
 {
     private const string TITULO = "Crear tiburon";
@@ -31,9 +15,9 @@ public static class CrearTiburon
 
     private const string RUTA_ICONO = "Assets/_Project/Materials/Shark_icon_1.png";
 
-    private const float LARGO_DESEADO = 3.5f;   // metros, de la nariz a la cola
-    private const float ALTURA_MODELO = 1.1f;   // metros que se sube el modelo para que la aleta asome
-    private const float ESCALA_POR_DEFECTO = 4f; // si no se pudo medir el modelo
+    private const float LARGO_DESEADO = 3.5f;
+    private const float ALTURA_MODELO = 1.1f;
+    private const float ESCALA_POR_DEFECTO = 4f;
 
     private const string NOMBRE_AVISO_PESCADOR = "Aviso_Peligro_Pescador";
     private const string NOMBRE_AVISO_CONDUCTOR = "Aviso_Peligro_Conductor";
@@ -63,9 +47,6 @@ public static class CrearTiburon
 
         string resumen = "";
 
-        // =========================================================
-        // 1. PREFAB DEL TIBURON
-        // =========================================================
         GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(RUTA_PREFAB);
         if (prefab != null)
         {
@@ -92,17 +73,11 @@ public static class CrearTiburon
             resumen += "- Prefab creado: " + RUTA_PREFAB + " (" + detalle + ")\n";
         }
 
-        // =========================================================
-        // 2. NETWORK PREFABS (con comprobacion en disco)
-        // =========================================================
         resumen += "- " + RegistrarEnNetworkPrefabs(prefab) + "\n";
 
         Undo.SetCurrentGroupName(TITULO);
         int grupoUndo = Undo.GetCurrentGroup();
 
-        // =========================================================
-        // 3. FISHSPAWNER
-        // =========================================================
         if (spawner.sharkPrefab != prefab)
         {
             Undo.RecordObject(spawner, "Asignar tiburon");
@@ -115,9 +90,6 @@ public static class CrearTiburon
             resumen += "- FishSpawner ya tenia el prefab asignado\n";
         }
 
-        // =========================================================
-        // 4. AVISOS EN PANTALLA
-        // =========================================================
         resumen += "- " + CrearAvisoSiFalta(menu.canvasGameHUD, NOMBRE_AVISO_PESCADOR, false, menu) + "\n";
         resumen += "- " + CrearAvisoSiFalta(menu.canvasControlesBote, NOMBRE_AVISO_CONDUCTOR, true, menu) + "\n";
 
@@ -131,16 +103,11 @@ public static class CrearTiburon
             "Si alguna linea empieza con OJO, copiala y enviala.", "OK");
     }
 
-    // ---------------------------------------------------------------------
-    // Prefab
-    // ---------------------------------------------------------------------
-
     private static GameObject BuscarModelo()
     {
         GameObject modelo = AssetDatabase.LoadAssetAtPath<GameObject>(RUTA_MODELO);
         if (modelo != null) return modelo;
 
-        // Por si la carpeta del asset tiene otro nombre
         foreach (string guid in AssetDatabase.FindAssets("shark_modeling t:Prefab"))
         {
             modelo = AssetDatabase.LoadAssetAtPath<GameObject>(AssetDatabase.GUIDToAssetPath(guid));
@@ -153,7 +120,6 @@ public static class CrearTiburon
     {
         detalle = "";
 
-        // Copia del pez: se desempaqueta solo la raiz (el pez payaso de adentro sigue siendo su prefab)
         GameObject raiz = (GameObject)PrefabUtility.InstantiatePrefab(prefabPez);
         if (raiz == null)
         {
@@ -193,13 +159,11 @@ public static class CrearTiburon
                 return null;
             }
 
-            // El pez payaso se queda como "motor" del nado, pero ya no se dibuja
             foreach (Renderer r in motor.GetComponentsInChildren<Renderer>(true))
             {
                 r.enabled = false;
             }
 
-            // Modelo del tiburon, hijo del motor (se mueve y gira con el)
             GameObject m = (GameObject)PrefabUtility.InstantiatePrefab(modelo, motor.transform);
             if (m == null)
             {
@@ -215,15 +179,11 @@ public static class CrearTiburon
             m.transform.localRotation = Quaternion.identity;
             m.transform.localScale = Vector3.one;
 
-            // Solo visual: sin colliders (el choque con el bote se calcula por distancia)
             foreach (Collider c in m.GetComponentsInChildren<Collider>(true))
             {
                 Object.DestroyImmediate(c);
             }
 
-            // Materiales: el prefab del asset apunta a los materiales que venian DENTRO del FBX.
-            // Al extraerlos (para pasarlos a URP) esas referencias quedan rotas y se ve rosado,
-            // asi que se asignan los .mat extraidos: el del cuerpo (con textura) y el de los ojos.
             Material matCuerpo = BuscarMaterial("01 - Default");
             Material matOjos = BuscarMaterial("02 - Default");
             foreach (Renderer r in m.GetComponentsInChildren<Renderer>(true))
@@ -243,12 +203,10 @@ public static class CrearTiburon
                 anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
             }
 
-            // Escala: se mide el modelo y se lleva a LARGO_DESEADO metros
             float largo = MedirLargo(m);
             float escala = largo > 0.0001f ? LARGO_DESEADO / largo : ESCALA_POR_DEFECTO;
             m.transform.localScale = Vector3.one * escala;
 
-            // Altura: se sube para que la aleta asome por la superficie
             float escalaPadreY = motor.transform.lossyScale.y;
             if (escalaPadreY < 0.0001f) escalaPadreY = 1f;
             m.transform.localPosition = new Vector3(0f, ALTURA_MODELO / escalaPadreY, 0f);
@@ -256,8 +214,6 @@ public static class CrearTiburon
             TiburonVisual visual = m.AddComponent<TiburonVisual>();
             visual.animator = anim;
 
-            // El icono flotante en rojo, para distinguirlo de un pez a simple vista
-            // Icono flotante propio (aleta en un circulo rojo). Si falta la imagen, el del pez en rojo.
             Sprite icono = AssetDatabase.LoadAssetAtPath<Sprite>(RUTA_ICONO);
             foreach (Image img in raiz.GetComponentsInChildren<Image>(true))
             {
@@ -291,7 +247,6 @@ public static class CrearTiburon
         }
     }
 
-    // Busca un material por nombre dentro de la carpeta del asset del tiburon
     private static Material BuscarMaterial(string nombre)
     {
         foreach (string guid in AssetDatabase.FindAssets("t:Material", new[] { "Assets/3D Shark pack" }))
@@ -302,7 +257,6 @@ public static class CrearTiburon
         return null;
     }
 
-    // Largo del modelo en metros (el lado mas largo en el plano horizontal)
     private static float MedirLargo(GameObject modelo)
     {
         bool hay = false;
@@ -316,14 +270,6 @@ public static class CrearTiburon
         return Mathf.Max(b.size.x, b.size.z);
     }
 
-    // ---------------------------------------------------------------------
-    // Network Prefabs
-    // ---------------------------------------------------------------------
-
-    /// <summary>
-    /// Agrega el prefab a la primera lista de Network Prefabs del NetworkManager, guarda y
-    /// comprueba leyendo el archivo del disco. Devuelve una linea para el resumen.
-    /// </summary>
     private static string RegistrarEnNetworkPrefabs(GameObject prefab)
     {
         const string MANUAL = "OJO: el tiburon NO quedo en Network Prefabs. Agregalo a mano: selecciona DefaultNetworkPrefabs y pulsa '+'. ";
@@ -363,7 +309,6 @@ public static class CrearTiburon
             if (pPrefab == null) return MANUAL + "(no se pudo escribir en la lista)";
             pPrefab.objectReferenceValue = prefab;
 
-            // El elemento nuevo nace como copia del anterior: se limpian sus otros campos
             SerializedProperty pOverride = nuevo.FindPropertyRelative("Override");
             if (pOverride != null) pOverride.intValue = 0;
             SerializedProperty pSource = nuevo.FindPropertyRelative("SourcePrefabToOverride");
@@ -376,7 +321,6 @@ public static class CrearTiburon
             soLista.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        // Guardar SIEMPRE (aunque ya estuviera en memoria) y comprobar en el archivo del disco
         EditorUtility.SetDirty(lista);
         AssetDatabase.SaveAssets();
 
@@ -397,10 +341,6 @@ public static class CrearTiburon
         return (yaEstaba ? "Ya estaba" : "Registrado") + " en Network Prefabs y guardado en disco (" + lista.name + ")";
     }
 
-    // ---------------------------------------------------------------------
-    // Avisos en pantalla
-    // ---------------------------------------------------------------------
-
     private static string CrearAvisoSiFalta(GameObject canvas, string nombre, bool esConductor, MenuMismaEscena menu)
     {
         foreach (AvisosPeligroUI existente in Object.FindObjectsOfType<AvisosPeligroUI>(true))
@@ -415,7 +355,6 @@ public static class CrearTiburon
 
         Transform padre = canvas.transform;
 
-        // Contenedor siempre activo (lleva el script), a pantalla completa
         GameObject contenedor = new GameObject(nombre, typeof(RectTransform));
         Undo.RegisterCreatedObjectUndo(contenedor, "Crear " + nombre);
         contenedor.transform.SetParent(padre, false);
@@ -423,7 +362,6 @@ public static class CrearTiburon
         contenedor.layer = canvas.layer;
         Estirar((RectTransform)contenedor.transform, Vector2.zero, Vector2.one);
 
-        // Fondo de color: NO bloquea los toques
         GameObject panel = new GameObject("Panel", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         panel.transform.SetParent(contenedor.transform, false);
         panel.layer = contenedor.layer;
@@ -433,7 +371,6 @@ public static class CrearTiburon
         fondo.color = new Color(0.85f, 0.05f, 0.05f, 0.30f);
         fondo.raycastTarget = false;
 
-        // Texto: arriba para el pescador; franja central para el conductor (arriba va el de la mina)
         GameObject goTexto = new GameObject("Texto", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
         goTexto.transform.SetParent(panel.transform, false);
         goTexto.layer = panel.layer;
@@ -449,7 +386,7 @@ public static class CrearTiburon
         }
         tmp.text = "TIBURON!\nPescador inhabilitado\n8.0 s";
         tmp.enableAutoSizing = true;
-        tmp.fontSizeMin = 1f;   // el canvas del HUD del pescador es muy pequeno
+        tmp.fontSizeMin = 1f;
         tmp.fontSizeMax = 90f;
         tmp.fontStyle = FontStyles.Bold;
         tmp.color = Color.white;
@@ -477,7 +414,6 @@ public static class CrearTiburon
         rt.localPosition = new Vector3(rt.localPosition.x, rt.localPosition.y, 0f);
     }
 
-    /// <summary>Toma la fuente de algun texto del menu para que los avisos tengan el mismo estilo.</summary>
     private static TMP_Text BuscarEstiloTexto(MenuMismaEscena menu)
     {
         GameObject[] candidatos = { menu.canvasMenuConductor, menu.canvasMenu, menu.canvasGameHUD };

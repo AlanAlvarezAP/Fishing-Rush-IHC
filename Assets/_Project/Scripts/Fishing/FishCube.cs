@@ -38,10 +38,6 @@ public class FishCube : NetworkBehaviour
     [Header("Debug")]
     [SerializeField] private bool showDebug = true;
 
-    // ------------------------------------------------------------------
-    // NUEVO (tiburon). Todo lo de abajo solo se usa si 'esTiburon' esta marcado; un pez normal
-    // sigue funcionando exactamente igual que antes.
-    // ------------------------------------------------------------------
     [Header("Tiburon: mordida (bloquea la cana)")]
     [SerializeField] private bool esTiburon = false;
     [Tooltip("Segundos que queda bloqueada la cana cuando el tiburon muerde el anzuelo")]
@@ -77,8 +73,6 @@ public class FishCube : NetworkBehaviour
     private Vector3 dirHuida = Vector3.forward;
     private static BoatController boteCache;
 
-    // Posicion real del tiburon (la del servidor), para que el conductor lo vea donde esta de verdad.
-    // Los peces normales no la usan (cada dispositivo los mueve por su cuenta, como antes).
     private NetworkVariable<Vector3> posTiburonNet = new NetworkVariable<Vector3>(
         Vector3.zero, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     );
@@ -87,7 +81,6 @@ public class FishCube : NetworkBehaviour
     );
     private bool posTiburonRecibida = false;
 
-    // La PC en red, o cualquier dispositivo sin red (pruebas)
     private bool EsAutoridad => !IsSpawned || IsServer;
 
     private FishAlive.FishMotion fishMotion;
@@ -111,10 +104,9 @@ public class FishCube : NetworkBehaviour
 
         ApplyNetStateLocally(currentNetState.Value);
 
-        // NUEVO (tiburon)
         if (esTiburon)
         {
-            proximaEmbestida = Time.time + 5f; // recien aparecido no embiste
+            proximaEmbestida = Time.time + 5f;
             if (IsServer && fishMotion != null)
             {
                 posTiburonNet.Value = fishMotion.transform.position;
@@ -186,7 +178,6 @@ public class FishCube : NetworkBehaviour
                 break;
         }
 
-        // NUEVO (tiburon): mientras muerde (Fighting) repite la animacion de ataque en los 3 dispositivos
         if (esTiburon && tiburonVisual != null)
         {
             tiburonVisual.SetAtacando(state == FishNetState.Fighting);
@@ -196,7 +187,7 @@ public class FishCube : NetworkBehaviour
     private void Awake()
     {
         fishMotion = GetComponentInChildren<FishAlive.FishMotion>();
-        tiburonVisual = GetComponentInChildren<TiburonVisual>(true); // NUEVO (tiburon)
+        tiburonVisual = GetComponentInChildren<TiburonVisual>(true);
     }
 
     private FishMinigameUI GetMinigameUI()
@@ -219,7 +210,6 @@ public class FishCube : NetworkBehaviour
                 cachedPlayerController.isHookOccupied = false;
                 cachedPlayerController.currentRequestedGesture = FishingGesture.None;
 
-                // NUEVO (tiburon): si lo borran mientras muerde, la cana no se queda bloqueada
                 if (esTiburon && isFighting) cachedPlayerController.CancelarBloqueoTiburon();
             }
         }
@@ -260,7 +250,6 @@ public class FishCube : NetworkBehaviour
                 return;
             }
 
-            // NUEVO (tiburon): si esta embistiendo al bote (o huyendo tras chocar) no busca el anzuelo
             if (esTiburon && ActualizarEmbestida()) return;
 
             if (!isApproaching)
@@ -281,7 +270,6 @@ public class FishCube : NetworkBehaviour
 
                     if (distToHook <= biteDistance)
                     {
-                        // NUEVO (tiburon): el tiburon no da minijuego de captura, bloquea la cana
                         if (esTiburon)
                             StartCoroutine(TiburonMordidaRoutine(targetHook, playerController));
                         else
@@ -424,7 +412,7 @@ public class FishCube : NetworkBehaviour
 
     private void LateUpdate()
     {
-        LateUpdateSincronizar(); // NUEVO: posicion real (la de la PC) en los celulares, antes de colocar la UI
+        LateUpdateSincronizar();
 
         if (timerUI != null && timerUI.gameObject.activeSelf && fishMotion != null)
         {
@@ -540,7 +528,6 @@ public class FishCube : NetworkBehaviour
                             gestureDone = CheckKeyboardFallback(expectedGesture);
                     }
 
-                    // NUEVO (tiburon): mientras el bote se tambalea, los patrones no cuentan
                     if (gestureDone && BoteTambaleando())
                     {
                         gestureDone = false;
@@ -622,10 +609,6 @@ public class FishCube : NetworkBehaviour
         }
     }
 
-    // =====================================================================
-    // NUEVO (tiburon)
-    // =====================================================================
-
     private static BoatController ObtenerBote()
     {
         if (boteCache == null) boteCache = FindObjectOfType<BoatController>();
@@ -638,15 +621,11 @@ public class FishCube : NetworkBehaviour
         return bote != null && bote.EstaTambaleando;
     }
 
-    /// <summary>
-    /// MORDIDA (solo PC). El tiburon llego al anzuelo: bloquea la cana 'segundosBloqueo' y va
-    /// pidiendo patrones; cada patron bien hecho le quita 'segundosPorPatron'. No suma puntos.
-    /// </summary>
     private IEnumerator TiburonMordidaRoutine(Transform hook, ThirdPController playerController)
     {
         if (IsServer)
         {
-            currentNetState.Value = FishNetState.Fighting; // en los celulares: se pega al anzuelo y ataca
+            currentNetState.Value = FishNetState.Fighting;
         }
         isApproaching = false;
         isFighting = true;
@@ -656,7 +635,7 @@ public class FishCube : NetworkBehaviour
         cachedPlayerController = playerController;
         if (playerController != null) playerController.isHookOccupied = true;
 
-        if (!EsAutoridad) yield break; // la mordida solo la decide la PC
+        if (!EsAutoridad) yield break;
 
         if (playerController == null)
         {
@@ -667,17 +646,16 @@ public class FishCube : NetworkBehaviour
 
         playerTransform = playerController.transform;
 
-        // El tiburon se queda quieto con el anzuelo en la boca
         if (fishMotion != null) fishMotion.enabled = false;
-        if (!IsSpawned && tiburonVisual != null) tiburonVisual.SetAtacando(true); // sin red no llega el cambio de estado
+        if (!IsSpawned && tiburonVisual != null) tiburonVisual.SetAtacando(true);
 
         playerController.BloquearPorTiburon(segundosBloqueo);
         playerController.TriggerRumble(0.6f);
-        playerController.ReproducirResultadoPatron(false); // sonido de fallo que ya existe
+        playerController.ReproducirResultadoPatron(false);
 
         if (showDebug) Debug.LogWarning("[TIBURON] Mordio el anzuelo. Cana bloqueada.");
 
-        yield return new WaitForSeconds(1.0f); // deja ver el anuncio antes del primer patron
+        yield return new WaitForSeconds(1.0f);
 
         int aciertos = 0;
         int intentos = 0;
@@ -702,7 +680,7 @@ public class FishCube : NetworkBehaviour
                 bool hecho = Input.GetKeyDown(KeyCode.R) || playerController.ValidateSpecificGesture(gesto);
                 if (hecho && BoteTambaleando())
                 {
-                    hecho = false; // con el bote tambaleando tampoco cuenta
+                    hecho = false;
                     playerController.ClearGestureWindow();
                 }
                 if (hecho) acerto = true;
@@ -733,7 +711,6 @@ public class FishCube : NetworkBehaviour
             yield return new WaitForSeconds(0.3f);
         }
 
-        // Fin: se suelta todo y el tiburon se va. NO se llama a HookMe ni a AddFish.
         isFighting = false;
 
         if (playerController != null)
@@ -748,10 +725,6 @@ public class FishCube : NetworkBehaviour
         EscapeAndDespawn();
     }
 
-    /// <summary>
-    /// EMBESTIDA (solo PC). Devuelve true mientras el tiburon esta ocupado con el bote
-    /// (embistiendo o huyendo despues del choque). Mientras tanto no busca el anzuelo.
-    /// </summary>
     private bool ActualizarEmbestida()
     {
         if (!EsAutoridad || fishMotion == null) return false;
@@ -759,7 +732,6 @@ public class FishCube : NetworkBehaviour
         BoatController bote = ObtenerBote();
         if (bote == null || !bote.MovimientoHabilitado)
         {
-            // Fuera de la partida (menu, game over) los tiburones no atacan
             if (embistiendo || huyendo) VolverANadar();
             return false;
         }
@@ -774,11 +746,10 @@ public class FishCube : NetworkBehaviour
             return true;
         }
 
-        if (isApproaching) return false; // ya va por el anzuelo: eso tiene prioridad
+        if (isApproaching) return false;
 
         float dist = bote.DistanciaHorizontalAlCasco(t.position);
 
-        // Choque: vale tanto si el tiburon embistio como si el conductor le paso por encima
         if (dist <= radioChoque && ahora >= proximoChoque)
         {
             ChocarConBote(bote, t);
@@ -791,7 +762,7 @@ public class FishCube : NetworkBehaviour
 
             embistiendo = true;
             finEmbestida = ahora + duracionMaxEmbestida;
-            fishMotion.enabled = false; // durante la embestida lo mueve este script
+            fishMotion.enabled = false;
             Debug.Log($"[TIBURON] Embiste al bote (estaba a {dist:0} m).");
         }
 
@@ -799,7 +770,6 @@ public class FishCube : NetworkBehaviour
 
         if (ahora >= finEmbestida)
         {
-            // El conductor lo esquivo
             proximaEmbestida = ahora + esperaEntreEmbestidas;
             VolverANadar();
         }
@@ -815,13 +785,11 @@ public class FishCube : NetworkBehaviour
         bote.Tambalear(segundosTambaleo);
         MostrarAtaqueTiburon();
 
-        // Puede haber mas de un jugador en la escena: vibra el Wiimote de todos
         foreach (ThirdPController pc in FindObjectsOfType<ThirdPController>())
         {
             pc.TriggerRumble(0.6f);
         }
 
-        // Despues del golpe se aleja del bote unos segundos
         embistiendo = false;
         huyendo = true;
         finHuida = ahora + 3f;
@@ -831,7 +799,6 @@ public class FishCube : NetworkBehaviour
         fishMotion.enabled = false;
     }
 
-    // Avanza hacia 'destino' girando poco a poco, siempre a la misma profundidad
     private void MoverTiburon(Transform t, Vector3 destino)
     {
         Vector3 dir = destino - t.position;
@@ -850,7 +817,6 @@ public class FishCube : NetworkBehaviour
         }
     }
 
-    // Vuelve al nado normal alrededor de su punto de origen
     private void VolverANadar()
     {
         embistiendo = false;
@@ -865,7 +831,6 @@ public class FishCube : NetworkBehaviour
         }
     }
 
-    // Animacion de ataque (una vez) en los 3 dispositivos
     private void MostrarAtaqueTiburon()
     {
         if (tiburonVisual != null) tiburonVisual.AtacarUnaVez();
@@ -879,12 +844,6 @@ public class FishCube : NetworkBehaviour
         if (tiburonVisual != null) tiburonVisual.AtacarUnaVez();
     }
 
-    // Posicion real del pez/tiburon en los celulares.
-    //   Tiburon: siempre (el conductor tiene que verlo donde esta de verdad para esquivarlo).
-    //   Pez normal: solo durante la pelea del minijuego. Antes, en la tablet el pez se quedaba
-    //   quieto mientras el anzuelo se movia solo; ahora se ve al pez tirando igual que en la PC.
-    // PC: publica la posicion (y mantiene al tiburon a profundidad fija).
-    // Celulares: colocan el pez donde dice la PC, no lo mueven por su cuenta.
     private void LateUpdateSincronizar()
     {
         if (fishMotion == null || isHooked) return;
@@ -897,7 +856,7 @@ public class FishCube : NetworkBehaviour
             if (esTiburon && !isFighting && !isApproaching)
             {
                 Vector3 p = t.position;
-                p.y = transform.position.y; // la aleta siempre a la misma altura
+                p.y = transform.position.y;
                 t.position = p;
             }
 
@@ -911,7 +870,6 @@ public class FishCube : NetworkBehaviour
             return;
         }
 
-        // ----- Celulares -----
         if (!sincronizar)
         {
             posTiburonRecibida = false;
@@ -921,13 +879,12 @@ public class FishCube : NetworkBehaviour
         if (fishMotion.enabled) fishMotion.enabled = false;
 
         Vector3 destino = posTiburonNet.Value;
-        if (destino == Vector3.zero) return; // todavia no llego la primera posicion
+        if (destino == Vector3.zero) return;
 
         Quaternion rotDestino = Quaternion.Euler(0f, yawTiburonNet.Value, 0f);
 
         if (!posTiburonRecibida || (t.position - destino).sqrMagnitude > 400f)
         {
-            // Primera vez (o salto muy grande): se coloca directo
             posTiburonRecibida = true;
             t.SetPositionAndRotation(destino, rotDestino);
         }
@@ -1067,7 +1024,7 @@ public class FishCube : NetworkBehaviour
 
     public void HookMe(Transform hook, Transform player)
     {
-        if (esTiburon) return; // NUEVO (tiburon): un tiburon nunca se captura
+        if (esTiburon) return;
 
         targetHook = hook;
         playerTransform = player;
