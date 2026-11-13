@@ -47,6 +47,29 @@ public class AnunciosUI : MonoBehaviour
         if (imgGestoCentral != null) imgGestoCentral.gameObject.SetActive(false);
     }
 
+    private Canvas canvasHUD;
+    private Camera camaraOriginalHUD;
+    private bool canvasHUDBuscado = false;
+    private float proximoChequeoCamara = 0f;
+
+    private void LateUpdate()
+    {
+        if (Time.unscaledTime < proximoChequeoCamara) return;
+        proximoChequeoCamara = Time.unscaledTime + 0.5f;
+
+        if (!canvasHUDBuscado)
+        {
+            canvasHUDBuscado = true;
+            canvasHUD = GetComponent<Canvas>();
+            if (canvasHUD != null) camaraOriginalHUD = canvasHUD.worldCamera;
+        }
+
+        if (canvasHUD == null || canvasHUD.renderMode != RenderMode.ScreenSpaceCamera) return;
+
+        Camera deseada = CamaraActivaUtil.Buscar(camaraOriginalHUD);
+        if (deseada != null && canvasHUD.worldCamera != deseada) canvasHUD.worldCamera = deseada;
+    }
+
     private void Relay(MenuMismaEscena.AnuncioAccion accion, int gesto, float duracion)
     {
         if (!EsServidorEnRed) return;
@@ -74,10 +97,36 @@ public class AnunciosUI : MonoBehaviour
         rutinaAnuncio = StartCoroutine(RutinaMostrarGesto(spriteGesto, duracion));
     }
 
+    private bool GestoDentroDelTile =>
+        tileAnuncios != null && imgGestoCentral != null &&
+        imgGestoCentral.transform != tileAnuncios.transform &&
+        imgGestoCentral.transform.IsChildOf(tileAnuncios.transform);
+
+    private GameObject RecuadroTexto()
+    {
+        if (tileAnuncios == null || txtAnuncio == null) return null;
+        if (!txtAnuncio.transform.IsChildOf(tileAnuncios.transform)) return null;
+
+        Transform actual = txtAnuncio.transform;
+        while (actual.parent != null && actual.parent != tileAnuncios.transform) actual = actual.parent;
+        return actual.parent == tileAnuncios.transform ? actual.gameObject : null;
+    }
+
     private IEnumerator RutinaMostrarGesto(Sprite spriteGesto, float duracion)
     {
-        // Garantizar que el recuadro de texto este apagado
-        if (tileAnuncios != null) tileAnuncios.SetActive(false);
+        bool dentro = GestoDentroDelTile;
+
+        if (dentro)
+        {
+            GameObject recuadro = RecuadroTexto();
+            if (recuadro != null) recuadro.SetActive(false);
+            tileAnuncios.SetActive(true);
+        }
+        else if (tileAnuncios != null)
+        {
+            // Garantizar que el recuadro de texto este apagado
+            tileAnuncios.SetActive(false);
+        }
 
         // Encender UNICAMENTE la imagen del gesto
         imgGestoCentral.sprite = spriteGesto;
@@ -88,6 +137,7 @@ public class AnunciosUI : MonoBehaviour
 
         // Apagar la imagen
         imgGestoCentral.gameObject.SetActive(false);
+        if (dentro) tileAnuncios.SetActive(false);
     }
 
     // --- 2. MOSTRAR MENSAJES DE TEXTO (AQUI SI SE ENCIENDE EL RECUADRO) ---
@@ -111,6 +161,9 @@ public class AnunciosUI : MonoBehaviour
             txtAnuncio.color = colorTexto;
             txtAnuncio.gameObject.SetActive(true);
         }
+
+        GameObject recuadro = RecuadroTexto();
+        if (recuadro != null) recuadro.SetActive(true);
 
         // Encender el cuadro con el mensaje final
         tileAnuncios.transform.SetAsLastSibling();

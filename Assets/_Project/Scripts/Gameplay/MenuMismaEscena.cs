@@ -91,6 +91,9 @@ public partial class MenuMismaEscena : NetworkBehaviour
     private Quaternion jugadorRotInicial;
     private bool posicionesGuardadas = false;
 
+    [Tooltip("Donde aparece el pescador dentro del bote (cae desde esa altura). Dejar x en 0: el pasillo es angosto y con x distinto de 0 queda subido en la baranda. z entre -2 y 0")]
+    public Vector3 posicionInicialPescador = new Vector3(0f, 5.0f, -0.9f);
+
     private Button[] activeButtons;
     private int selectedButtonIndex = 0;
 
@@ -325,6 +328,8 @@ public partial class MenuMismaEscena : NetworkBehaviour
             cg.blocksRaycasts = false;
         }
 
+        ConectarBotonesSalir();
+
         if (canvasGameOver != null) canvasGameOver.SetActive(false);
         if (panelWiimote != null) panelWiimote.SetActive(false);
         if (panelTutorial != null) panelTutorial.SetActive(false);
@@ -454,6 +459,19 @@ public partial class MenuMismaEscena : NetworkBehaviour
     {
         if (activeButtons == null || activeButtons.Length == 0) return;
 
+        if (UnityEngine.EventSystems.EventSystem.current != null)
+        {
+            GameObject actual = UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject;
+            for (int i = 0; actual != null && i < activeButtons.Length; i++)
+            {
+                if (activeButtons[i] != null && activeButtons[i].gameObject == actual)
+                {
+                    selectedButtonIndex = i;
+                    break;
+                }
+            }
+        }
+
         selectedButtonIndex = (selectedButtonIndex + direccion + activeButtons.Length) % activeButtons.Length;
         ResaltarBotonLocal(selectedButtonIndex);
 
@@ -551,6 +569,8 @@ public partial class MenuMismaEscena : NetworkBehaviour
         }
     }
 
+    public bool PartidaEnCurso => !IsSpawned || isGameStartedNet.Value;
+
     /// <summary>Solo en la PC: arranca la partida en todos los dispositivos.</summary>
     private void IniciarPartidaServidor()
     {
@@ -561,6 +581,18 @@ public partial class MenuMismaEscena : NetworkBehaviour
 
         FishSpawner spawner = FindObjectOfType<FishSpawner>();
         if (spawner != null) spawner.ReiniciarSpawning();
+
+        MinaSpawner minaSpawner = FindObjectOfType<MinaSpawner>();
+        if (minaSpawner != null) minaSpawner.Reiniciar();
+        if (boteObjeto != null)
+        {
+            BoatController boteMinas = boteObjeto.GetComponent<BoatController>();
+            if (boteMinas != null) boteMinas.CancelarInmovilizacion();
+            if (boteMinas != null) boteMinas.CancelarTambaleo();
+        }
+
+        GarantizarJugador();
+        if (playerController != null) playerController.CancelarBloqueoTiburon();
 
         // Hora de fin de la partida en tiempo del servidor (antes de isGameStartedNet)
         FishingTimerHUD timer = FindObjectOfType<FishingTimerHUD>(true);
@@ -877,8 +909,37 @@ public partial class MenuMismaEscena : NetworkBehaviour
         MostrarMenuLocal();
     }
 
+    private void ConectarBotonesSalir()
+    {
+        var conectados = new System.Collections.Generic.HashSet<Button>();
+
+        ConectarSalir(btnSalir, conectados);
+        ConectarSalir(btnIniciarSalir, conectados);
+
+        GameObject[] menus = { canvasMenu, canvasMenuConductor };
+        foreach (GameObject menu in menus)
+        {
+            if (menu == null) continue;
+            foreach (Button b in menu.GetComponentsInChildren<Button>(true))
+            {
+                if (b.name == "FaceSalir") ConectarSalir(b, conectados);
+            }
+        }
+    }
+
+    private void ConectarSalir(Button boton, System.Collections.Generic.HashSet<Button> conectados)
+    {
+        if (boton == null || conectados.Contains(boton)) return;
+        conectados.Add(boton);
+
+        if (boton.onClick.GetPersistentEventCount() > 0) return;
+
+        boton.onClick.AddListener(SalirDelJuego);
+    }
+
     public void SalirDelJuego()
     {
+        Debug.Log("[MENU] Salir del juego.");
 #if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying = false;
 #else
@@ -941,7 +1002,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
 
         if (activeButtons.Length > 0 && activeButtons[0] != null)
         {
-            activeButtons[0].Select();
+            ResaltarBotonLocal(0);
             if (IsSpawned && (IsServer || IsHost))
             {
                 SincronizarSeleccionBotonClientRpc(0);
@@ -986,6 +1047,15 @@ public partial class MenuMismaEscena : NetworkBehaviour
             isGameStartedNet.Value = false;
             pescadorListoNet.Value = false;
             conductorListoNet.Value = false;
+
+            MinaSpawner minaSpawnerFin = FindObjectOfType<MinaSpawner>();
+            if (minaSpawnerFin != null) minaSpawnerFin.ClearAll();
+
+            // Corta cualquier lucha o mordida de tiburon en curso: al quitar los peces, su OnDestroy
+            // libera la cana (anzuelo ocupado, gesto pedido, bloqueo del tiburon) y se detienen
+            // sus corrutinas, que si no seguian pidiendo gestos y vibrando en la pantalla de game over
+            FishSpawner spawnerFin = FindObjectOfType<FishSpawner>();
+            if (spawnerFin != null) spawnerFin.ClearAllFish();
         }
 
         MostrarGameOverLocal();
@@ -1045,7 +1115,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
 
         if (activeButtons.Length > 0 && activeButtons[0] != null)
         {
-            activeButtons[0].Select();
+            ResaltarBotonLocal(0);
             if (IsSpawned && (IsServer || IsHost))
             {
                 SincronizarSeleccionBotonClientRpc(0);
@@ -1090,6 +1160,9 @@ public partial class MenuMismaEscena : NetworkBehaviour
         {
             spawner.ClearAllFish();
         }
+
+        MinaSpawner minaSpawner = FindObjectOfType<MinaSpawner>();
+        if (minaSpawner != null) minaSpawner.ClearAll();
 
         MostrarMenuLocal();
     }
@@ -1243,7 +1316,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
             
             if (cc != null) cc.enabled = false;
 
-            playerController.transform.localPosition = new Vector3(0f, 5.0f, 0f);
+            playerController.transform.localPosition = posicionInicialPescador;
             playerController.transform.localRotation = Quaternion.identity;
 
             Physics.SyncTransforms();
@@ -1269,6 +1342,25 @@ public partial class MenuMismaEscena : NetworkBehaviour
             {
                 activeButtons[index].Select();
                 Debug.Log($"[UI DEBUG] Botron {index} ({activeButtons[index].name}) seleccionado localmente.");
+            }
+
+            for (int i = 0; i < activeButtons.Length; i++)
+            {
+                Button boton = activeButtons[i];
+                if (boton == null) continue;
+
+                Navigation nav = boton.navigation;
+                if (nav.mode != Navigation.Mode.None)
+                {
+                    nav.mode = Navigation.Mode.None;
+                    boton.navigation = nav;
+                }
+
+                TileHover hover = boton.GetComponent<TileHover>();
+                if (hover == null) continue;
+
+                if (i == index) hover.ActivarHover();
+                else hover.DesactivarHover();
             }
         }
     }

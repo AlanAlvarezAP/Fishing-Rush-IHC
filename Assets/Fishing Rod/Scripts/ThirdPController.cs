@@ -168,6 +168,55 @@ public class ThirdPController : NetworkBehaviour
     private float sendTimer = 0f;
     private bool hasRemoteYaw = false;
 
+    private NetworkVariable<double> finBloqueoTiburonNet = new NetworkVariable<double>(
+        0d, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+    private float finBloqueoTiburonOffline = 0f;
+
+    public float SegundosBloqueoTiburon
+    {
+        get
+        {
+            if (IsSpawned) return Mathf.Max(0f, (float)(finBloqueoTiburonNet.Value - NetworkManager.ServerTime.Time));
+            return Mathf.Max(0f, finBloqueoTiburonOffline - Time.time);
+        }
+    }
+
+    public bool BloqueadoPorTiburon => SegundosBloqueoTiburon > 0f;
+
+    public void BloquearPorTiburon(float segundos)
+    {
+        if (IsSpawned)
+        {
+            if (!IsServer) return;
+            finBloqueoTiburonNet.Value = NetworkManager.ServerTime.Time + segundos;
+        }
+        else
+        {
+            finBloqueoTiburonOffline = Time.time + segundos;
+        }
+        Debug.Log($"[TIBURON] Cana bloqueada {segundos:0.0} s.");
+    }
+
+    public void ReducirBloqueoTiburon(float segundos)
+    {
+        if (IsSpawned)
+        {
+            if (!IsServer) return;
+            finBloqueoTiburonNet.Value = finBloqueoTiburonNet.Value - segundos;
+        }
+        else
+        {
+            finBloqueoTiburonOffline -= segundos;
+        }
+    }
+
+    public void CancelarBloqueoTiburon()
+    {
+        finBloqueoTiburonOffline = 0f;
+        if (IsSpawned && IsServer && finBloqueoTiburonNet.Value != 0d) finBloqueoTiburonNet.Value = 0d;
+    }
+
     public bool CanFishBite()
     {
         return isFishing && alreadyCast && !isReeling && !isCastingInProcess && !isHookOccupied;
@@ -369,7 +418,7 @@ public class ThirdPController : NetworkBehaviour
         }
 
         // --- EQUIPAR / DESEQUIPAR ---
-        if (Input.GetKeyDown(KeyCode.E) || wiiEquipTrigger)
+        if ((Input.GetKeyDown(KeyCode.E) || wiiEquipTrigger) && !BloqueadoPorTiburon)
         {
             if (!isFishing)
             {
@@ -436,7 +485,7 @@ public class ThirdPController : NetworkBehaviour
         }
 
         // --- LANZAMIENTO ---
-        if ((Input.GetMouseButtonDown(0) || wiiCastTrigger) && isFishing && !alreadyCast && !isReeling && !isCastingInProcess)
+        if ((Input.GetMouseButtonDown(0) || wiiCastTrigger) && isFishing && !alreadyCast && !isReeling && !isCastingInProcess && !BloqueadoPorTiburon)
         {
             if (Input.GetMouseButtonDown(0)) debugCalculatedForce = 25f;
             animator.SetTrigger("cast");
@@ -447,7 +496,7 @@ public class ThirdPController : NetworkBehaviour
 
         // --- RECOGIDA ---
         bool inputReel = Input.GetKeyDown(KeyCode.Q) || wiiReelTrigger;
-        if (inputReel && isFishing && alreadyCast && !isReeling && !isCastingInProcess)
+        if (inputReel && isFishing && alreadyCast && !isReeling && !isCastingInProcess && !BloqueadoPorTiburon)
         {
             StartReeling();
         }
