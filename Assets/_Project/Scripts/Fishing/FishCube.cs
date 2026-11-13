@@ -104,14 +104,13 @@ public class FishCube : NetworkBehaviour
 
         ApplyNetStateLocally(currentNetState.Value);
 
-        if (esTiburon)
+        if (esTiburon) proximaEmbestida = Time.time + 5f;
+
+        // Posicion inicial para los celulares (peces normales y tiburones)
+        if (IsServer && fishMotion != null)
         {
-            proximaEmbestida = Time.time + 5f;
-            if (IsServer && fishMotion != null)
-            {
-                posTiburonNet.Value = fishMotion.transform.position;
-                yawTiburonNet.Value = fishMotion.transform.eulerAngles.y;
-            }
+            posTiburonNet.Value = fishMotion.transform.position;
+            yawTiburonNet.Value = fishMotion.transform.eulerAngles.y;
         }
     }
 
@@ -844,11 +843,17 @@ public class FishCube : NetworkBehaviour
         if (tiburonVisual != null) tiburonVisual.AtacarUnaVez();
     }
 
+    /// <summary>
+    /// Posicion del pez/tiburon: la PC (autoridad) la publica y los celulares la siguen.
+    /// Se sincroniza SIEMPRE (no solo en la lucha): si no, cada dispositivo simula su propio nado
+    /// (FishMotion) y en el VR un pez podia estar en otro lugar que en la PC hasta que mordia.
+    /// En los celulares FishMotion se apaga; su Animator sigue animando el nado.
+    /// (Las variables se llaman posTiburonNet / yawTiburonNet pero las usan todos los peces.)
+    /// </summary>
     private void LateUpdateSincronizar()
     {
         if (fishMotion == null || isHooked) return;
 
-        bool sincronizar = esTiburon || isFighting;
         Transform t = fishMotion.transform;
 
         if (EsAutoridad)
@@ -860,19 +865,14 @@ public class FishCube : NetworkBehaviour
                 t.position = p;
             }
 
-            if (IsSpawned && sincronizar)
+            if (IsSpawned)
             {
+                // Umbral de 2 cm / 0.5 grados para no mandar datos si el pez esta quieto
                 if ((posTiburonNet.Value - t.position).sqrMagnitude > 0.0004f) posTiburonNet.Value = t.position;
 
                 float yaw = t.eulerAngles.y;
                 if (Mathf.Abs(Mathf.DeltaAngle(yawTiburonNet.Value, yaw)) > 0.5f) yawTiburonNet.Value = yaw;
             }
-            return;
-        }
-
-        if (!sincronizar)
-        {
-            posTiburonRecibida = false;
             return;
         }
 
