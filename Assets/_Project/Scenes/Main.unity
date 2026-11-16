@@ -651,7 +651,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 22400762, guid: 67117722a812a2e46ab8cb8eafbf5f5e, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: 0.000011444092
+      value: 0.0000076293945
       objectReference: {fileID: 0}
     - target: {fileID: 22426080, guid: 67117722a812a2e46ab8cb8eafbf5f5e, type: 3}
       propertyPath: m_AnchorMax.x
@@ -3447,6 +3447,9 @@ MonoBehaviour:
   colorTiburon: {r: 0.85, g: 0.05, b: 0.05, a: 0.3}
   colorTambaleo: {r: 0.9, g: 0.45, b: 0.05, a: 0.18}
   colorSinFondo: {r: 0, g: 0, b: 0, a: 0}
+  tamanoAvisoVR: {x: 1280, y: 720}
+  distanciaAvisoVR: 0.9
+  anchoAvisoVR: 0.85
 --- !u!1 &223360266
 GameObject:
   m_ObjectHideFlags: 0
@@ -3500,6 +3503,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   direccionBoton: {x: 0, y: -1}
+  colorLetra: {r: 0.1, g: 0.1, b: 0.1, a: 1}
+  tamanoLetraMax: 72
 --- !u!114 &223360269
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4979,6 +4984,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   direccionBoton: {x: -1, y: 0}
+  colorLetra: {r: 0.1, g: 0.1, b: 0.1, a: 1}
+  tamanoLetraMax: 72
 --- !u!114 &290646844
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7013,6 +7020,10 @@ MonoBehaviour:
   iconCross: {fileID: 21300000, guid: 784ba5e946e70744291777986d30e91a, type: 3}
   colorVictoria: {r: 0.17715193, g: 0.5245282, b: 0.17715193, a: 1}
   colorDerrota: {r: 0.6679245, g: 0.1499679, b: 0.1499679, a: 1}
+  tamanoHudVR: {x: 141.3, y: 79.5}
+  distanciaHudVR: 1
+  fovVerticalDisenoHud: 60
+  anchoHudVRManual: 0
 --- !u!1 &434996973
 GameObject:
   m_ObjectHideFlags: 0
@@ -18036,6 +18047,9 @@ MonoBehaviour:
   colorTiburon: {r: 0.85, g: 0.05, b: 0.05, a: 0.3}
   colorTambaleo: {r: 0.9, g: 0.45, b: 0.05, a: 0.18}
   colorSinFondo: {r: 0, g: 0, b: 0, a: 0}
+  tamanoAvisoVR: {x: 1280, y: 720}
+  distanciaAvisoVR: 0.9
+  anchoAvisoVR: 0.85
 --- !u!1 &1217885420
 GameObject:
   m_ObjectHideFlags: 0
@@ -18347,6 +18361,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   direccionBoton: {x: 0, y: 1}
+  colorLetra: {r: 0.1, g: 0.1, b: 0.1, a: 1}
+  tamanoLetraMax: 72
 --- !u!114 &1236230254
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -27869,6 +27885,11 @@ MonoBehaviour:
   volumenJuego: 0.2
   posicionInicialPescador: {x: 0, y: 5, z: -0.9}
   segundosEntrePing: 30
+  filasTablero: 5
+  filasTableroPC: 10
+  escalaGrillaConTablero: 0.56
+  posicionGrillaConTablero: {x: -62, y: 188}
+  tamanoLetraTablero: 32
 --- !u!4 &1987106948
 Transform:
   m_ObjectHideFlags: 0
@@ -29121,6 +29142,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   direccionBoton: {x: 1, y: 0}
+  colorLetra: {r: 0.1, g: 0.1, b: 0.1, a: 1}
+  tamanoLetraMax: 72
 --- !u!114 &2122909584
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -123,6 +123,9 @@ public class BoatController : NetworkBehaviour
     [SerializeField] private bool invertirInclinacion = false;
 
     private float proximoEnvioInput = 0f;
+    private bool giroPorInclinacion = false;
+    private bool ultimoGiroPorInclinacionEnviado = false;
+    private bool giroRemotoPorInclinacion = false;
     private Transform[] camarasPescador = new Transform[0];
     private Quaternion[] rotBasePescador = new Quaternion[0];
     private float proximaBusquedaPescador = 0f;
@@ -497,11 +500,13 @@ public class BoatController : NetworkBehaviour
         if (!offline && !IsServer && IsSpawned && ConfigJugador.RolActual == TipoJugador.Jugador2_ConductorTablet)
         {
             Vector2 inputTablet = ReadInput();
-            if ((inputTablet - ultimoInputEnviado).sqrMagnitude > 0.0001f && Time.unscaledTime >= proximoEnvioInput)
+            bool cambio = (inputTablet - ultimoInputEnviado).sqrMagnitude > 0.0001f || giroPorInclinacion != ultimoGiroPorInclinacionEnviado;
+            if (cambio && Time.unscaledTime >= proximoEnvioInput)
             {
                 proximoEnvioInput = Time.unscaledTime + 0.06f;
                 ultimoInputEnviado = inputTablet;
-                EnviarInputBoteServerRpc(inputTablet);
+                ultimoGiroPorInclinacionEnviado = giroPorInclinacion;
+                EnviarInputBoteServerRpc(inputTablet, giroPorInclinacion);
             }
         }
 
@@ -510,8 +515,20 @@ public class BoatController : NetworkBehaviour
             if (movimientoHabilitado && !EstaInmovilizado)
             {
                 // Input del conductor remoto; sin red (pruebas) se usa el tactil local
-                Vector2 input = inputRemoto.sqrMagnitude > 0.0001f ? inputRemoto : ReadInput();
+                bool remoto = inputRemoto.sqrMagnitude > 0.0001f;
+                Vector2 input = remoto ? inputRemoto : ReadInput();
+                Vector3 posicionPrevia = transform.position;
                 ApplyMovement(input);
+
+                if (RegistroPartida.Activo)
+                {
+                    Vector3 paso = transform.position - posicionPrevia;
+                    paso.y = 0f;
+                    bool girando = Mathf.Abs(input.x) > 0.1f;
+                    bool conInput = girando || Mathf.Abs(input.y) > 0.1f;
+                    bool inclinacion = remoto ? giroRemotoPorInclinacion : giroPorInclinacion;
+                    RegistroPartida.Bote(paso.magnitude, Time.deltaTime, conInput, girando, inclinacion);
+                }
             }
 
             if (!offline && IsSpawned)
@@ -537,7 +554,12 @@ public class BoatController : NetworkBehaviour
         }
 
         float giro = pads.x;
-        if (Mathf.Abs(pads.x) < 0.1f) giro = LeerInclinacion();
+        giroPorInclinacion = false;
+        if (Mathf.Abs(pads.x) < 0.1f)
+        {
+            giro = LeerInclinacion();
+            giroPorInclinacion = Mathf.Abs(giro) > 0.1f;
+        }
 
         return new Vector2(giro, pads.y);
     }
@@ -595,8 +617,9 @@ public class BoatController : NetworkBehaviour
     }
 
     [ServerRpc(RequireOwnership = false)]
-    private void EnviarInputBoteServerRpc(Vector2 input)
+    private void EnviarInputBoteServerRpc(Vector2 input, bool porInclinacion)
     {
         inputRemoto = Vector2.ClampMagnitude(input, 1f);
+        giroRemotoPorInclinacion = porInclinacion;
     }
 }

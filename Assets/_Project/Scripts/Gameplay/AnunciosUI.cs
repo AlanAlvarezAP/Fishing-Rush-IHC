@@ -47,24 +47,89 @@ public class AnunciosUI : MonoBehaviour
         if (imgGestoCentral != null) imgGestoCentral.gameObject.SetActive(false);
     }
 
+    [Header("HUD en VR")]
+    [Tooltip("Tamano del HUD tal como se diseno en pantalla 16:9")]
+    public Vector2 tamanoHudVR = new Vector2(141.3f, 79.5f);
+    [Tooltip("Metros entre los ojos y el HUD (igual al Plane Distance del canvas en el editor)")]
+    public float distanciaHudVR = 1f;
+    [Tooltip("Campo de vision vertical de la camara con la que se diseno el HUD en el editor (FirstPersonCamera = 60)")]
+    public float fovVerticalDisenoHud = 60f;
+    [Tooltip("0 = automatico: el HUD mide lo mismo que en el editor (a 1 m con 60 grados, unos 2.05 m de ancho), " +
+             "asi los paneles quedan donde se acomodaron usando VR_limits. Pon un valor en metros solo para forzar otro ancho.")]
+    public float anchoHudVRManual = 0f;
+
+    /// <summary>
+    /// Ancho del HUD en metros. Antes estaba fijo en 0.95 m, menos de la mitad de lo que mide el HUD en el
+    /// editor, y en el VR los paneles quedaban encogidos y amontonados al centro.
+    /// </summary>
+    private float AnchoHudVR
+    {
+        get
+        {
+            if (anchoHudVRManual > 0f) return anchoHudVRManual;
+            float alto = 2f * distanciaHudVR * Mathf.Tan(fovVerticalDisenoHud * 0.5f * Mathf.Deg2Rad);
+            float aspecto = tamanoHudVR.y > 0f ? tamanoHudVR.x / tamanoHudVR.y : 16f / 9f;
+            return alto * aspecto;
+        }
+    }
+
     private Canvas canvasHUD;
     private Camera camaraOriginalHUD;
     private bool canvasHUDBuscado = false;
+    private bool hudEnMundo = false;
     private float proximoChequeoCamara = 0f;
+
+    private void OnEnable()
+    {
+        Application.onBeforeRender += SeguirCamaraVR;
+    }
+
+    private void OnDisable()
+    {
+        Application.onBeforeRender -= SeguirCamaraVR;
+    }
+
+    private void SeguirCamaraVR()
+    {
+        if (!hudEnMundo || canvasHUD == null) return;
+
+        Camera cam = CamaraActivaUtil.Buscar(camaraOriginalHUD);
+        if (cam == null) return;
+
+        CamaraActivaUtil.ColocarFrente(canvasHUD, cam, tamanoHudVR, distanciaHudVR, AnchoHudVR);
+    }
 
     private void LateUpdate()
     {
-        if (Time.unscaledTime < proximoChequeoCamara) return;
-        proximoChequeoCamara = Time.unscaledTime + 0.5f;
-
         if (!canvasHUDBuscado)
         {
             canvasHUDBuscado = true;
             canvasHUD = GetComponent<Canvas>();
-            if (canvasHUD != null) camaraOriginalHUD = canvasHUD.worldCamera;
+            if (canvasHUD != null)
+            {
+                camaraOriginalHUD = canvasHUD.worldCamera;
+
+                if (CamaraActivaUtil.EnVR && canvasHUD.isRootCanvas)
+                {
+                    hudEnMundo = true;
+                    CanvasScaler scaler = canvasHUD.GetComponent<CanvasScaler>();
+                    if (scaler != null) scaler.dynamicPixelsPerUnit = 20f;
+                }
+            }
         }
 
-        if (canvasHUD == null || canvasHUD.renderMode != RenderMode.ScreenSpaceCamera) return;
+        if (canvasHUD == null) return;
+
+        if (hudEnMundo)
+        {
+            SeguirCamaraVR();
+            return;
+        }
+
+        if (Time.unscaledTime < proximoChequeoCamara) return;
+        proximoChequeoCamara = Time.unscaledTime + 0.5f;
+
+        if (canvasHUD.renderMode != RenderMode.ScreenSpaceCamera) return;
 
         Camera deseada = CamaraActivaUtil.Buscar(camaraOriginalHUD);
         if (deseada != null && canvasHUD.worldCamera != deseada) canvasHUD.worldCamera = deseada;
