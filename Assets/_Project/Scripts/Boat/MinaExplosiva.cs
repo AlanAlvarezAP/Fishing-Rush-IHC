@@ -200,6 +200,7 @@ public class MinaExplosiva : NetworkBehaviour
 
         yaExploto = true;
         bote.Inmovilizar(segundosInmovil);
+        RegistroPartida.MinaChocada(segundosInmovil);
 
         if (SinRed)
         {
