@@ -7022,7 +7022,8 @@ MonoBehaviour:
   colorDerrota: {r: 0.6679245, g: 0.1499679, b: 0.1499679, a: 1}
   tamanoHudVR: {x: 141.3, y: 79.5}
   distanciaHudVR: 1
-  anchoHudVR: 0.95
+  fovVerticalDisenoHud: 60
+  anchoHudVRManual: 0
 --- !u!1 &434996973
 GameObject:
   m_ObjectHideFlags: 0

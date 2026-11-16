@@ -7,7 +7,14 @@ public static class CamaraActivaUtil
 
     public static bool EsConductor => ConfigJugador.RolActual == TipoJugador.Jugador2_ConductorTablet;
 
+    // En el celular el modo VR depende del ROL (no del estado del XR): el XR del pescador se inicia
+    // unos frames despues de abrir la app (CardboardStartup), y los scripts que deciden al arrancar
+    // (por ejemplo AnunciosUI) creerian que no hay VR. En la PC / editor se usa el estado real del XR.
+#if UNITY_ANDROID && !UNITY_EDITOR
+    public static bool EnVR => !EsConductor;
+#else
     public static bool EnVR => UnityEngine.XR.XRSettings.enabled && !EsConductor;
+#endif
 
     public static Camera Buscar(Camera preferida = null)
     {
