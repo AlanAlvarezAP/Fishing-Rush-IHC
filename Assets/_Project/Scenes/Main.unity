@@ -651,7 +651,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 22400762, guid: 67117722a812a2e46ab8cb8eafbf5f5e, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: 0.000011444092
+      value: 0.0000076293945
       objectReference: {fileID: 0}
     - target: {fileID: 22426080, guid: 67117722a812a2e46ab8cb8eafbf5f5e, type: 3}
       propertyPath: m_AnchorMax.x
@@ -5999,7 +5999,7 @@ MonoBehaviour:
   clientBtn: {fileID: 1378547361}
   uiContainer: {fileID: 1388962851}
   hudContainer: {fileID: 423686160}
-  pcIPAddress: 127.0.0.1
+  pcIPAddress: 192.168.101.5
   port: 7777
   segundosEntreReintentos: 3
 --- !u!1 &367431902
@@ -19991,9 +19991,9 @@ MonoBehaviour:
   m_MaxConnectAttempts: 60
   m_DisconnectTimeoutMS: 30000
   ConnectionData:
-    Address: 127.0.0.1
+    Address: 192.168.101.5
     Port: 7777
-    ServerListenAddress: 127.0.0.1
+    ServerListenAddress: 192.168.101.5
   DebugSimulator:
     PacketDelayMS: 0
     PacketJitterMS: 0

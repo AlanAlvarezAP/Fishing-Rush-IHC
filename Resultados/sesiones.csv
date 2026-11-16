@@ -1,0 +1,4 @@
+﻿partida,fecha,pescador,conductor,duracion_s,peces,intentos,ratio_capturas_pct,patrones_ok,patrones_fallados,precision_patrones_pct,segundos_por_patron,horizontal_ok,horizontal_fallo,vertical_ok,vertical_fallo,circulo_ok,circulo_fallo,cruz_ok,cruz_fallo,segundos_primer_pez,minas,segundos_inmovil,mordidas_tiburon,embestidas_tiburon,segundos_bloqueado,segundos_tambaleo,patrones_tiburon_ok,patrones_tiburon_fallados,distancia_bote_m,segundos_bote_quieto,segundos_giro_inclinacion,segundos_giro_pads,giro_inclinacion_pct
+2,2026-11-16 10:40:29,Pedro,Juan,180,0,1,0,0,6,0,0,0,2,0,1,0,2,0,1,,2,10,0,1,0,3,0,0,205.4,134,0,10.4,0
+3,2026-11-16 10:43:56,Pedro,Pedro2,180,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,,0,0,0,0,0,0,0,0,0,180,0,0,
+4,2026-11-16 10:58:52,Paquito,Paquito2,180,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,,0,0,0,4,0,12,0,0,263,140.4,0,6.7,0
