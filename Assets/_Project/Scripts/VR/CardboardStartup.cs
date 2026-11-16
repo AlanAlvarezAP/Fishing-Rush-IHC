@@ -1,6 +1,19 @@
+using System.Collections;
 using Google.XR.Cardboard;
 using UnityEngine;
+using UnityEngine.XR.Management;
 
+/// <summary>
+/// Arranque del modo VR (Cardboard), solo en el celular del PESCADOR.
+///
+/// El XR ya NO se inicia solo al abrir la app (Project Settings > XR Plug-in Management > Android >
+/// "Initialize XR on Startup" desmarcado): se inicia aqui y solo si la build es del pescador.
+/// Antes se iniciaba siempre y el celular conductor lo apagaba al arrancar (DeinitializeLoader);
+/// apagar el XR en caliente en Android rompia el dibujo de los textos del conductor (botones y consola
+/// sin letras). Asi el conductor nunca enciende el XR.
+///
+/// Si "Initialize XR on Startup" sigue marcado, se mantiene el comportamiento anterior como respaldo.
+/// </summary>
 public class CardboardStartup : MonoBehaviour
 {
     private bool readyToRun = false;
@@ -12,16 +25,47 @@ public class CardboardStartup : MonoBehaviour
         enabled = false;
         return;
 #else
-        // En Android (Cliente VR), configuramos el brillo y mantenemos la pantalla encendida
+        // En Android mantenemos la pantalla encendida y con brillo maximo
         Screen.sleepTimeout = SleepTimeout.NeverSleep;
         Screen.brightness = 1.0f;
 
-        // El celular conductor tambien es Android, pero NO usa VR: se apaga el XR (sin pantalla dividida)
         if (ConfigJugador.RolActual == TipoJugador.Jugador2_ConductorTablet)
         {
-            ApagarXR();
+            // Conductor: sin VR. Solo si el XR se inicio solo (ajuste antiguo) se apaga como respaldo.
+            if (XRIniciado()) ApagarXR();
             enabled = false;
             return;
+        }
+
+        StartCoroutine(IniciarVR());
+#endif
+    }
+
+    private static XRManagerSettings Manager =>
+        XRGeneralSettings.Instance != null ? XRGeneralSettings.Instance.Manager : null;
+
+    private static bool XRIniciado() => Manager != null && Manager.isInitializationComplete;
+
+    private IEnumerator IniciarVR()
+    {
+        if (Manager == null)
+        {
+            Debug.LogError("[VR] No hay configuracion de XR (XR Plug-in Management).");
+            yield break;
+        }
+
+        if (!XRIniciado())
+        {
+            Debug.Log("[VR] Iniciando Cardboard...");
+            yield return Manager.InitializeLoader();
+
+            if (Manager.activeLoader == null)
+            {
+                Debug.LogError("[VR] No se pudo iniciar el XR (Cardboard).");
+                yield break;
+            }
+
+            Manager.StartSubsystems();
         }
 
         if (!Api.HasDeviceParams())
@@ -30,19 +74,21 @@ public class CardboardStartup : MonoBehaviour
         }
 
         readyToRun = true;
-#endif
+        Debug.Log("[VR] Cardboard listo.");
     }
 
     private void ApagarXR()
     {
-        var settings = UnityEngine.XR.Management.XRGeneralSettings.Instance;
-        if (settings == null || settings.Manager == null) return;
+        if (Manager == null || !XRIniciado()) return;
 
-        if (settings.Manager.isInitializationComplete)
-        {
-            settings.Manager.StopSubsystems();
-            settings.Manager.DeinitializeLoader();
-        }
+        Manager.StopSubsystems();
+        Manager.DeinitializeLoader();
+    }
+
+    private void OnApplicationQuit()
+    {
+        // Solo el pescador enciende el XR: se apaga ordenadamente al salir
+        if (readyToRun) ApagarXR();
     }
 
     public void Update()
@@ -50,12 +96,7 @@ public class CardboardStartup : MonoBehaviour
         if (!readyToRun) return;
 
 #if !UNITY_EDITOR
-        if (UnityEngine.XR.Management.XRGeneralSettings.Instance == null ||
-            UnityEngine.XR.Management.XRGeneralSettings.Instance.Manager == null ||
-            !UnityEngine.XR.Management.XRGeneralSettings.Instance.Manager.isInitializationComplete)
-        {
-            return;
-        }
+        if (!XRIniciado()) return;
 #endif
 
         if (Api.IsGearButtonPressed)
