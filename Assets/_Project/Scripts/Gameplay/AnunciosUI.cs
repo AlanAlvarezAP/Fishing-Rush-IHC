@@ -47,24 +47,71 @@ public class AnunciosUI : MonoBehaviour
         if (imgGestoCentral != null) imgGestoCentral.gameObject.SetActive(false);
     }
 
+    [Header("HUD en VR")]
+    [Tooltip("Tamano del HUD tal como se diseno en pantalla 16:9")]
+    public Vector2 tamanoHudVR = new Vector2(141.3f, 79.5f);
+    [Tooltip("Metros entre los ojos y el HUD")]
+    public float distanciaHudVR = 1f;
+    [Tooltip("Ancho del HUD en metros. Con 0.95 a 1 m ocupa unos 50 grados")]
+    public float anchoHudVR = 0.95f;
+
     private Canvas canvasHUD;
     private Camera camaraOriginalHUD;
     private bool canvasHUDBuscado = false;
+    private bool hudEnMundo = false;
     private float proximoChequeoCamara = 0f;
+
+    private void OnEnable()
+    {
+        Application.onBeforeRender += SeguirCamaraVR;
+    }
+
+    private void OnDisable()
+    {
+        Application.onBeforeRender -= SeguirCamaraVR;
+    }
+
+    private void SeguirCamaraVR()
+    {
+        if (!hudEnMundo || canvasHUD == null) return;
+
+        Camera cam = CamaraActivaUtil.Buscar(camaraOriginalHUD);
+        if (cam == null) return;
+
+        CamaraActivaUtil.ColocarFrente(canvasHUD, cam, tamanoHudVR, distanciaHudVR, anchoHudVR);
+    }
 
     private void LateUpdate()
     {
-        if (Time.unscaledTime < proximoChequeoCamara) return;
-        proximoChequeoCamara = Time.unscaledTime + 0.5f;
-
         if (!canvasHUDBuscado)
         {
             canvasHUDBuscado = true;
             canvasHUD = GetComponent<Canvas>();
-            if (canvasHUD != null) camaraOriginalHUD = canvasHUD.worldCamera;
+            if (canvasHUD != null)
+            {
+                camaraOriginalHUD = canvasHUD.worldCamera;
+
+                if (CamaraActivaUtil.EnVR && canvasHUD.isRootCanvas)
+                {
+                    hudEnMundo = true;
+                    CanvasScaler scaler = canvasHUD.GetComponent<CanvasScaler>();
+                    if (scaler != null) scaler.dynamicPixelsPerUnit = 20f;
+                }
+            }
         }
 
-        if (canvasHUD == null || canvasHUD.renderMode != RenderMode.ScreenSpaceCamera) return;
+        if (canvasHUD == null) return;
+
+        if (hudEnMundo)
+        {
+            SeguirCamaraVR();
+            return;
+        }
+
+        if (Time.unscaledTime < proximoChequeoCamara) return;
+        proximoChequeoCamara = Time.unscaledTime + 0.5f;
+
+        if (canvasHUD.renderMode != RenderMode.ScreenSpaceCamera) return;
 
         Camera deseada = CamaraActivaUtil.Buscar(camaraOriginalHUD);
         if (deseada != null && canvasHUD.worldCamera != deseada) canvasHUD.worldCamera = deseada;

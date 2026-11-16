@@ -23,16 +23,24 @@ public class AvisosPeligroUI : MonoBehaviour
 
     private bool canvasPropioIntentado = false;
     private Canvas canvasPropio;
-    private float proximoChequeoCanvas = 0f;
+    private bool canvasEnMundo = false;
+
+    [Header("Aviso en VR")]
+    public Vector2 tamanoAvisoVR = new Vector2(1280f, 720f);
+    [Tooltip("Un poco mas cerca que el HUD para que quede por delante")]
+    public float distanciaAvisoVR = 0.9f;
+    public float anchoAvisoVR = 0.85f;
 
     private void OnEnable()
     {
         if (panel != null) panel.SetActive(false);
+        Application.onBeforeRender += SeguirCamaraVR;
     }
 
     private void OnDisable()
     {
         if (panel != null) panel.SetActive(false);
+        Application.onBeforeRender -= SeguirCamaraVR;
     }
 
     private void Update()
@@ -155,21 +163,27 @@ public class AvisosPeligroUI : MonoBehaviour
 
     private void ActualizarCanvasPropio()
     {
-        if (canvasPropio == null || Time.unscaledTime < proximoChequeoCanvas) return;
-        proximoChequeoCanvas = Time.unscaledTime + 0.5f;
+        if (canvasPropio == null) return;
 
-        if (!CamaraActivaUtil.EnVR)
+        if (CamaraActivaUtil.EnVR)
         {
-            if (canvasPropio.renderMode != RenderMode.ScreenSpaceOverlay) canvasPropio.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvasEnMundo = true;
+            SeguirCamaraVR();
             return;
         }
 
-        Camera cam = CamaraActivaUtil.Buscar(canvasPropio.worldCamera);
+        canvasEnMundo = false;
+        if (canvasPropio.renderMode != RenderMode.ScreenSpaceOverlay) canvasPropio.renderMode = RenderMode.ScreenSpaceOverlay;
+    }
+
+    private void SeguirCamaraVR()
+    {
+        if (!canvasEnMundo || canvasPropio == null) return;
+
+        Camera cam = CamaraActivaUtil.Buscar();
         if (cam == null) return;
 
-        if (canvasPropio.renderMode != RenderMode.ScreenSpaceCamera) canvasPropio.renderMode = RenderMode.ScreenSpaceCamera;
-        if (canvasPropio.worldCamera != cam) canvasPropio.worldCamera = cam;
-        canvasPropio.planeDistance = 0.5f;
+        CamaraActivaUtil.ColocarFrente(canvasPropio, cam, tamanoAvisoVR, distanciaAvisoVR, anchoAvisoVR);
     }
 
     private void CrearCajaOscura()

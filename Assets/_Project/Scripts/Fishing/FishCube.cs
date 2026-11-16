@@ -346,6 +346,7 @@ public class FishCube : NetworkBehaviour
                             {
                                 FishingCounterManager.Instance.AddFish();
                             }
+                            RegistroPartida.PezCapturado();
 
                             ThirdPController playerController = GetControllerFromHook(targetHook);
                             if (playerController != null)
@@ -437,6 +438,7 @@ public class FishCube : NetworkBehaviour
         targetHook = hook;
         playerTransform = player;
         successfulFollows = 0;
+        RegistroPartida.IntentoPez();
 
         if (playerController != null)
         {
@@ -507,6 +509,7 @@ public class FishCube : NetworkBehaviour
 
             bool matchedThisTurn = false;
             float turnTimer = 0f;
+            float segundosAcierto = 0f;
 
             if (playerController != null) playerController.ClearGestureWindow();
 
@@ -537,12 +540,15 @@ public class FishCube : NetworkBehaviour
                     {
                         Debug.Log("[DEBUG PESCA] Gesto/R completado con exito!");
                         matchedThisTurn = true;
+                        segundosAcierto = turnTimer;
                         if (playerController != null) playerController.ClearGestureWindow();
                     }
                 }
 
                 yield return null;
             }
+
+            RegistroPartida.Patron((int)expectedGesture, matchedThisTurn, segundosAcierto);
 
             if (matchedThisTurn)
             {
@@ -649,6 +655,8 @@ public class FishCube : NetworkBehaviour
         if (!IsSpawned && tiburonVisual != null) tiburonVisual.SetAtacando(true);
 
         playerController.BloquearPorTiburon(segundosBloqueo);
+        RegistroPartida.MordidaTiburon();
+        float inicioMordida = Time.time;
         playerController.TriggerRumble(0.6f);
         playerController.ReproducirResultadoPatron(false);
 
@@ -690,6 +698,7 @@ public class FishCube : NetworkBehaviour
             if (playerController == null) break;
 
             intentos++;
+            if (acerto || playerController.BloqueadoPorTiburon) RegistroPartida.PatronTiburon((int)gesto, acerto);
             if (acerto)
             {
                 aciertos++;
@@ -711,6 +720,7 @@ public class FishCube : NetworkBehaviour
         }
 
         isFighting = false;
+        RegistroPartida.TiempoBloqueado(Time.time - inicioMordida);
 
         if (playerController != null)
         {
@@ -782,6 +792,7 @@ public class FishCube : NetworkBehaviour
         proximaEmbestida = ahora + esperaEntreEmbestidas;
 
         bote.Tambalear(segundosTambaleo);
+        RegistroPartida.EmbestidaTiburon(segundosTambaleo);
         MostrarAtaqueTiburon();
 
         foreach (ThirdPController pc in FindObjectsOfType<ThirdPController>())

@@ -172,6 +172,10 @@ public partial class MenuMismaEscena : NetworkBehaviour
         EstadoJugador.Caminando, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     );
 
+    private NetworkVariable<bool> registrandoNombresNet = new NetworkVariable<bool>(
+        false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+
     public override void OnNetworkSpawn()
     {
         // Handlers con nombre (no lambdas) para poder quitarlos en OnNetworkDespawn: si el celular
@@ -185,6 +189,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
         AplicarTextoEstado(TextoEstado(estadoJugadorNet.Value));
 
         InicializarLogsRed(); // quien se conecta y ping (MenuMismaEscena.Red.cs)
+        InicializarTableroRed();
 
         if (IsServer)
         {
@@ -220,6 +225,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
 
         if (NetworkManager != null) NetworkManager.OnClientDisconnectCallback -= OnClienteDesconectado;
         FinalizarLogsRed();
+        FinalizarTableroRed();
 
         base.OnNetworkDespawn();
     }
@@ -329,6 +335,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
         }
 
         ConectarBotonesSalir();
+        PrepararMenuTablero();
 
         if (canvasGameOver != null) canvasGameOver.SetActive(false);
         if (panelWiimote != null) panelWiimote.SetActive(false);
@@ -376,11 +383,22 @@ public partial class MenuMismaEscena : NetworkBehaviour
         ActualizarTextoEstadoHUD();
         ActualizarPingRed();
 
+        var sistemaEventos = UnityEngine.EventSystems.EventSystem.current;
+        if (sistemaEventos != null && sistemaEventos.sendNavigationEvents) sistemaEventos.sendNavigationEvents = false;
+
+        if (capturandoNombres) return;
+
         // --- ATAJOS DE PRUEBA (funcionan en cualquier dispositivo y se aplican en todos) ---
         // Y: salta la espera del otro jugador y empieza la partida
         if (Input.GetKeyDown(KeyCode.Y)) PedirForzarInicio();
         // T: marca el tutorial como hecho y muestra el menu completo (Jugar, Wiimote, Tutorial, Salir)
         if (Input.GetKeyDown(KeyCode.T)) PedirMenuCompleto();
+
+        if (tableroAbierto)
+        {
+            ActualizarEntradaTablero();
+            return;
+        }
 
         if (Input.GetKeyDown(KeyCode.Escape))
         {
@@ -433,24 +451,34 @@ public partial class MenuMismaEscena : NetworkBehaviour
                 ret = wiimote.ReadWiimoteData();
             } while (ret > 0);
 
-            bool currentWiiDown = wiimote.Button.d_down || wiimote.Button.d_right;
-            bool currentWiiUp = wiimote.Button.d_up || wiimote.Button.d_left;
+            bool currentWiiDown = wiimote.Button.d_down;
+            bool currentWiiUp = wiimote.Button.d_up;
+            bool currentWiiLeft = wiimote.Button.d_left;
+            bool currentWiiRight = wiimote.Button.d_right;
             bool currentWiiA = wiimote.Button.a;
 
-            if (currentWiiDown && !wasWiiDown) CambiarSeleccion(1);
+            if (currentWiiDown && !wasWiiDown) MoverSeleccion(0, 1);
             wasWiiDown = currentWiiDown;
 
-            if (currentWiiUp && !wasWiiUp) CambiarSeleccion(-1);
+            if (currentWiiUp && !wasWiiUp) MoverSeleccion(0, -1);
             wasWiiUp = currentWiiUp;
+
+            if (currentWiiRight && !wasWiiRight) MoverSeleccion(1, 0);
+            wasWiiRight = currentWiiRight;
+
+            if (currentWiiLeft && !wasWiiLeft) MoverSeleccion(-1, 0);
+            wasWiiLeft = currentWiiLeft;
 
             if (currentWiiA && !wasWiiA) EjecutarBotonSeleccionado();
             wasWiiA = currentWiiA;
         }
 #endif
 
-        if (Input.GetKeyDown(KeyCode.S) || Input.GetKeyDown(KeyCode.DownArrow)) CambiarSeleccion(1);
-        if (Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.UpArrow)) CambiarSeleccion(-1);
-        if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) EjecutarBotonSeleccionado();
+        if (Input.GetKeyDown(KeyCode.S) || Input.GetKeyDown(KeyCode.DownArrow)) MoverSeleccion(0, 1);
+        if (Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.UpArrow)) MoverSeleccion(0, -1);
+        if (Input.GetKeyDown(KeyCode.D) || Input.GetKeyDown(KeyCode.RightArrow)) MoverSeleccion(1, 0);
+        if (Input.GetKeyDown(KeyCode.A) || Input.GetKeyDown(KeyCode.LeftArrow)) MoverSeleccion(-1, 0);
+        if (Time.unscaledTime >= ignorarConfirmarHasta && (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))) EjecutarBotonSeleccionado();
 
         
     }
@@ -483,6 +511,19 @@ public partial class MenuMismaEscena : NetworkBehaviour
 
     private void EjecutarBotonSeleccionado()
     {
+        if (activeButtons != null && UnityEngine.EventSystems.EventSystem.current != null)
+        {
+            GameObject actual = UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject;
+            for (int i = 0; actual != null && i < activeButtons.Length; i++)
+            {
+                if (activeButtons[i] != null && activeButtons[i].gameObject == actual)
+                {
+                    selectedButtonIndex = i;
+                    break;
+                }
+            }
+        }
+
         if (activeButtons != null && selectedButtonIndex >= 0 && selectedButtonIndex < activeButtons.Length && activeButtons[selectedButtonIndex] != null)
         {
             activeButtons[selectedButtonIndex].onClick.Invoke();
@@ -561,7 +602,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
 
         if (pescadorListoNet.Value && conductorListoNet.Value)
         {
-            IniciarPartidaServidor();
+            PedirNombresServidor();
         }
         else
         {
@@ -599,6 +640,10 @@ public partial class MenuMismaEscena : NetworkBehaviour
         float duracion = timer != null ? timer.DuracionPartida : 180f;
         finPartidaNet.Value = NetworkManager.ServerTime.Time + duracion;
 
+        capturandoNombres = false;
+        if (registrandoNombresNet.Value) registrandoNombresNet.Value = false;
+        IniciarRegistroPartida(duracion);
+
         isGameStartedNet.Value = true;   // los clientes empiezan por el OnValueChanged
         OcultarMenuYEmpezarLocal();
     }
@@ -611,7 +656,9 @@ public partial class MenuMismaEscena : NetworkBehaviour
         bool conductor = EsConductor();
         bool yoListo = conductor ? conductorListoNet.Value : pescadorListoNet.Value;
         bool otroListo = conductor ? pescadorListoNet.Value : conductorListoNet.Value;
-        bool esperando = yoListo && !otroListo && !isGameStartedNet.Value;
+        bool esperando = ((yoListo && !otroListo) || registrandoNombresNet.Value) && !isGameStartedNet.Value;
+
+        AplicarTextoEspera();
 
         if (esperando) MostrarEsperaLocal();
         else OcultarEsperaLocal();
@@ -619,6 +666,8 @@ public partial class MenuMismaEscena : NetworkBehaviour
 
     private void MostrarEsperaLocal()
     {
+        OcultarPanelTablero();
+
         if (EsConductor())
         {
             if (canvasGameOverConductor != null) canvasGameOverConductor.SetActive(false);
@@ -724,6 +773,13 @@ public partial class MenuMismaEscena : NetworkBehaviour
         SetPantallaPescadorServidor(PantallaPescador.Juego);
         AjustarVolumenMusica(volumenJuego);
         Time.timeScale = 1f;
+
+        OcultarPanelTablero();
+        if (!IsSpawned)
+        {
+            FishingTimerHUD timerRegistro = FindObjectOfType<FishingTimerHUD>(true);
+            IniciarRegistroPartida(timerRegistro != null ? timerRegistro.DuracionPartida : 180f);
+        }
 
         ResetearPosicionesOriginales();
 
@@ -874,6 +930,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
     {
         SetPantallaPescadorServidor(PantallaPescador.Tutorial);
         AjustarVolumenMusica(volumenJuego);
+        OcultarPanelTablero();
 
         if (canvasMenu != null) canvasMenu.SetActive(true);
         if (panelIniciarMenu != null) panelIniciarMenu.SetActive(false);
@@ -971,6 +1028,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
         AjustarVolumenMusica(volumenMenu);
         Time.timeScale = 1f;
 
+        OcultarPanelTablero();
         OcultarEsperaLocal();
         if (canvasMenu != null) canvasMenu.SetActive(true);
         if (panelMenuPrincipal != null) panelMenuPrincipal.SetActive(true); // Restaura panel de botones principales
@@ -995,7 +1053,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
         {
             if (panelIniciarMenu != null) panelIniciarMenu.SetActive(false);
             if (panelMenuPrincipal != null) panelMenuPrincipal.SetActive(true);
-            activeButtons = new Button[] { btnJugar, btnWiimote, btnTutorial, btnSalir };
+            activeButtons = BotonesMenuPrincipal();
         }
 
         selectedButtonIndex = 0;
@@ -1015,6 +1073,8 @@ public partial class MenuMismaEscena : NetworkBehaviour
     {
         AjustarVolumenMusica(volumenMenu);
         Time.timeScale = 1f;
+
+        OcultarPanelTablero();
 
         if (canvasMenu != null) canvasMenu.SetActive(false);
         if (canvasGameOver != null) canvasGameOver.SetActive(false);
@@ -1040,6 +1100,8 @@ public partial class MenuMismaEscena : NetworkBehaviour
     public void MostrarGameOver()
     {
         if (GameOverVisibleLocal()) return;
+
+        GuardarResultadoPartida();
 
         // La PC termina la partida para todos: ya no esta en juego y nadie esta listo
         if (IsSpawned && IsServer)
@@ -1072,6 +1134,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
     private void MostrarGameOverLocal()
     {
         AjustarVolumenMusica(volumenMenu);
+        OcultarPanelTablero();
 
         if (EsConductor())
         {
