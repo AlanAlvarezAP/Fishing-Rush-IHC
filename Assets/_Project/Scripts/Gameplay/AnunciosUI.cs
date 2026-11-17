@@ -58,10 +58,6 @@ public class AnunciosUI : MonoBehaviour
              "asi los paneles quedan donde se acomodaron usando VR_limits. Pon un valor en metros solo para forzar otro ancho.")]
     public float anchoHudVRManual = 0f;
 
-    /// <summary>
-    /// Ancho del HUD en metros. Antes estaba fijo en 0.95 m, menos de la mitad de lo que mide el HUD en el
-    /// editor, y en el VR los paneles quedaban encogidos y amontonados al centro.
-    /// </summary>
     private float AnchoHudVR
     {
         get

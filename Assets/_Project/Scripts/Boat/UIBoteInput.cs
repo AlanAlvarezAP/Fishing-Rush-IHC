@@ -48,6 +48,7 @@ public class UIBoteInput : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 
         letra.gameObject.SetActive(true);
         letra.enabled = true;
+        FuenteSegura.Aplicar(letra);
 
         RectTransform rt = letra.rectTransform;
         rt.anchorMin = Vector2.zero;
