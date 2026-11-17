@@ -529,6 +529,7 @@ public partial class MenuMismaEscena
         rt.offsetMax = Vector2.zero;
 
         TextMeshProUGUI texto = go.AddComponent<TextMeshProUGUI>();
+        FuenteSegura.Aplicar(texto);
         texto.raycastTarget = false;
         texto.enableWordWrapping = false;
         texto.overflowMode = TextOverflowModes.Ellipsis;
