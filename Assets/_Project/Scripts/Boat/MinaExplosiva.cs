@@ -53,6 +53,22 @@ public class MinaExplosiva : NetworkBehaviour
         Vector3.zero, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     );
 
+    // true = la mina no deriva (las del pasillo del tutorial del conductor). La PC la fija antes
+    // de spawnear y se publica en OnNetworkSpawn (cada dispositivo calcula la deriva por su cuenta).
+    private NetworkVariable<bool> quietaNet = new NetworkVariable<bool>(
+        false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+    private bool quietaOffline = false;
+
+    /// <summary>Llamar en la PC antes de Spawn (o sin red).</summary>
+    public void SetQuieta(bool quieta)
+    {
+        quietaOffline = quieta;
+        if (IsSpawned && IsServer) quietaNet.Value = quieta;
+    }
+
+    private bool Quieta => IsSpawned ? quietaNet.Value : quietaOffline;
+
     private const float SEGUNDOS_ANTES_DE_DESPAWN = 0.3f;
 
     private bool yaExploto = false;
@@ -65,7 +81,11 @@ public class MinaExplosiva : NetworkBehaviour
         base.OnNetworkSpawn();
         explotoNet.OnValueChanged += OnExplotoCambio;
 
-        if (IsServer) origenNet.Value = transform.position;
+        if (IsServer)
+        {
+            origenNet.Value = transform.position;
+            quietaNet.Value = quietaOffline;
+        }
         origen = origenNet.Value;
         fase = (NetworkObjectId % 360UL) * Mathf.Deg2Rad;
         sentido = (NetworkObjectId % 2UL == 0UL) ? 1f : -1f;
@@ -94,7 +114,7 @@ public class MinaExplosiva : NetworkBehaviour
 
     private void Update()
     {
-        if (!origenListo || yaExploto || radioDeriva <= 0f || segundosPorVuelta <= 0.1f) return;
+        if (!origenListo || yaExploto || radioDeriva <= 0f || segundosPorVuelta <= 0.1f || Quieta) return;
         if (IsSpawned && explotoNet.Value) return;
 
         double tiempo = IsSpawned ? NetworkManager.ServerTime.Time : (double)Time.time;
