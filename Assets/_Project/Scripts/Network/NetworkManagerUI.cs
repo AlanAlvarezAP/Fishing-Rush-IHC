@@ -23,6 +23,16 @@ public class NetworkManagerUI : MonoBehaviour
     [SerializeField] private string pcIPAddress = "127.0.0.1";
     [SerializeField] private ushort port = 7777;
 
+    [Header("Tiempos de conexion (Unity Transport)")]
+    [Tooltip("Sin recibir nada en este tiempo se da la conexion por perdida (antes 30000: tardaba 30 s en notarlo)")]
+    [SerializeField] private int disconnectTimeoutMS = 5000;
+    [Tooltip("Cada cuanto se manda un latido si no hay otros mensajes (debe ser menor que el de desconexion)")]
+    [SerializeField] private int heartbeatTimeoutMS = 1000;
+    [Tooltip("Espera de cada intento de conexion (antes 10000)")]
+    [SerializeField] private int connectTimeoutMS = 1000;
+    [Tooltip("Intentos por cada reconexion: 10 x 1 s = unos 10 s, luego se vuelve a empezar (antes 60 x 10 s = 10 min)")]
+    [SerializeField] private int maxConnectAttempts = 10;
+
     [Header("Reconexion (celulares)")]
     [Tooltip("Segundos entre intentos de reconexion cuando el celular pierde la conexion con la PC")]
     [SerializeField] private float segundosEntreReintentos = 3f;
@@ -172,11 +182,21 @@ public class NetworkManagerUI : MonoBehaviour
         //}
     }
  
+    /// <summary>Los mismos tiempos en la PC y en los celulares (se aplican antes de conectar).</summary>
+    private void AplicarTiempos(UnityTransport transport)
+    {
+        transport.DisconnectTimeoutMS = disconnectTimeoutMS;
+        transport.HeartbeatTimeoutMS = Mathf.Min(heartbeatTimeoutMS, disconnectTimeoutMS / 2);
+        transport.ConnectTimeoutMS = connectTimeoutMS;
+        transport.MaxConnectAttempts = maxConnectAttempts;
+    }
+
     private void SetTransportAsServer()
     {
         var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
         if (transport != null)
         {
+            AplicarTiempos(transport);
             transport.SetConnectionData(pcIPAddress, port, "0.0.0.0");
         }
     }
@@ -187,6 +207,7 @@ public class NetworkManagerUI : MonoBehaviour
         if (transport != null)
         {
             Debug.Log("[NETCODE_TEST] Conectando a IP: " + pcIPAddress + " en puerto: " + port);
+            AplicarTiempos(transport);
             transport.SetConnectionData(pcIPAddress, port);
         }
     }

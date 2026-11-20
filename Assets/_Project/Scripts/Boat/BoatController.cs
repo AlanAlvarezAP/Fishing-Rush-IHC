@@ -689,6 +689,25 @@ public class BoatController : NetworkBehaviour
         return ReadInput();
     }
 
+    /// <summary>Servidor: olvida el ultimo input del conductor (se desconecto: el bote no debe seguir solo).</summary>
+    public void DetenerInputRemoto()
+    {
+        inputRemoto = Vector2.zero;
+        giroRemotoPorInclinacion = false;
+    }
+
+    /// <summary>
+    /// Servidor: tras una pausa por desconexion, la inmovilizacion (mina) y el tambaleo (tiburon)
+    /// que estaban en curso siguen con el tiempo que les quedaba (usan la hora de la red, que no se pausa).
+    /// </summary>
+    public void AplazarEfectos(double segundos)
+    {
+        if (!IsSpawned || !IsServer || segundos <= 0d) return;
+        double ahora = NetworkManager.ServerTime.Time;
+        if (finInmovilNet.Value > ahora) finInmovilNet.Value += segundos;
+        if (finTambaleoNet.Value > ahora) finTambaleoNet.Value += segundos;
+    }
+
     public void SnapTo(Vector3 pos, Quaternion rot)
     {
         inputRemoto = Vector2.zero;

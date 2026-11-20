@@ -67,6 +67,13 @@ public partial class MenuMismaEscena
         ulong id = rpcParams.Receive.SenderClientId;
         rolesPorCliente[id] = (TipoJugador)rol;
         Debug.Log($"[RED] Se conecto el {NombreRol((TipoJugador)rol)} (cliente {id}). {ResumenConectados()}");
+        RolRegistradoServidor(id, (TipoJugador)rol); // pausa por desconexion (MenuMismaEscena.Desconexion.cs)
+
+        // El celular ya termino de sincronizar: se le reenvia la posicion completa del pescador.
+        // Al reconectarse, la primera posicion (en espacio local del bote) puede llegar mal y como
+        // su altura dentro del bote casi no cambia, nunca se corregia (salia hundido bajo el bote).
+        GarantizarJugador();
+        TeleportRedJugador();
     }
 
     private void OnClienteConectadoLog(ulong clientId)

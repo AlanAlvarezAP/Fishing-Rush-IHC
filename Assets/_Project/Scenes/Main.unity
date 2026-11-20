@@ -724,7 +724,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 22400762, guid: 67117722a812a2e46ab8cb8eafbf5f5e, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -0.00002670288
+      value: -0.0000076293945
       objectReference: {fileID: 0}
     - target: {fileID: 22426080, guid: 67117722a812a2e46ab8cb8eafbf5f5e, type: 3}
       propertyPath: m_AnchorMax.x
@@ -3845,6 +3845,7 @@ MonoBehaviour:
   colorTiburon: {r: 0.85, g: 0.05, b: 0.05, a: 0.3}
   colorTambaleo: {r: 0.9, g: 0.45, b: 0.05, a: 0.18}
   colorSinFondo: {r: 0, g: 0, b: 0, a: 0}
+  colorDesconexion: {r: 0, g: 0, b: 0, a: 0.55}
   tamanoAvisoVR: {x: 1280, y: 720}
   distanciaAvisoVR: 0.9
   anchoAvisoVR: 0.85
@@ -7099,8 +7100,12 @@ MonoBehaviour:
   clientBtn: {fileID: 1378547361}
   uiContainer: {fileID: 1388962851}
   hudContainer: {fileID: 423686160}
-  pcIPAddress: 127.0.0.1
+  pcIPAddress: 192.168.101.3
   port: 7777
+  disconnectTimeoutMS: 5000
+  heartbeatTimeoutMS: 1000
+  connectTimeoutMS: 1000
+  maxConnectAttempts: 10
   segundosEntreReintentos: 3
 --- !u!1 &359103396
 GameObject:
@@ -21786,6 +21791,7 @@ MonoBehaviour:
   colorTiburon: {r: 0.85, g: 0.05, b: 0.05, a: 0.3}
   colorTambaleo: {r: 0.9, g: 0.45, b: 0.05, a: 0.18}
   colorSinFondo: {r: 0, g: 0, b: 0, a: 0}
+  colorDesconexion: {r: 0, g: 0, b: 0, a: 0.55}
   tamanoAvisoVR: {x: 1280, y: 720}
   distanciaAvisoVR: 0.9
   anchoAvisoVR: 0.85
@@ -24306,9 +24312,9 @@ MonoBehaviour:
   m_MaxConnectAttempts: 60
   m_DisconnectTimeoutMS: 30000
   ConnectionData:
-    Address: 127.0.0.1
+    Address: 192.168.101.3
     Port: 7777
-    ServerListenAddress: 127.0.0.1
+    ServerListenAddress: 192.168.101.3
   DebugSimulator:
     PacketDelayMS: 0
     PacketJitterMS: 0
@@ -27884,7 +27890,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!212 &1603942037
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -27947,8 +27953,8 @@ Transform:
   m_GameObject: {fileID: 1603942036}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.1, y: 1.5, z: 1}
-  m_LocalScale: {x: 0.9, y: 0.8, z: 1}
+  m_LocalPosition: {x: -0.058, y: 1.529, z: 1}
+  m_LocalScale: {x: 1.2, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -34682,6 +34688,7 @@ MonoBehaviour:
   volumenMenu: 0.5
   volumenJuego: 0.2
   posicionInicialPescador: {x: 0, y: 5, z: -0.9}
+  segundosMaxEsperaReconexion: 60
   segundosEntrePing: 30
   filasTablero: 5
   filasTableroPC: 10

@@ -319,6 +319,9 @@ public class ThirdPController : NetworkBehaviour
 
         if (!tieneControl) return;
 
+        // Partida en pausa (alguien se desconecto): no se puede equipar, lanzar ni recoger
+        if (Time.timeScale <= 0f) return;
+
         if (!isFishing) debugState = "No pescando";
         else if (isCastingInProcess) debugState = "Cargando tiro...";
         else if (isReeling) debugState = "Recogiendo...";
