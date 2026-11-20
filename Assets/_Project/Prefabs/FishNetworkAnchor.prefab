@@ -315,8 +315,8 @@ MonoBehaviour:
   turnDuration: 2
   evasiveDistance: 30
   swimAgileConfig: {fileID: 11400000, guid: 20b7ef3632ce58a42899843006b46db7, type: 2}
-  totalTurns: 6
-  requiredSuccesses: 4
+  totalTurns: 3
+  requiredSuccesses: 2
   showDebug: 0
 --- !u!114 &3600851865631149496
 MonoBehaviour:

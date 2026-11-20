@@ -588,8 +588,20 @@ public class BoatController : NetworkBehaviour
 
         if (Mathf.Abs(input.y) > 0.1f)
         {
-            transform.position += transform.forward * input.y * moveSpeed * Time.deltaTime;
-            seMovio = true;
+            Vector3 previa = transform.position;
+            Vector3 nueva = previa + transform.forward * input.y * moveSpeed * Time.deltaTime;
+
+            // El bote se mueve por transform (no por fisica), asi que un collider no lo frena:
+            // la zona del tutorial del pescador se bloquea aqui. Solo se impide ENTRAR; si ya
+            // estaba dentro puede salir.
+            // Igual con la zona permitida (pasillo del tutorial del conductor): no puede SALIR
+            bool libre = !DentroZonaBloqueada(nueva) || DentroZonaBloqueada(previa);
+            bool dentro = DentroZonaPermitida(nueva) || !DentroZonaPermitida(previa);
+            if (libre && dentro)
+            {
+                transform.position = nueva;
+                seMovio = true;
+            }
         }
 
         if (Mathf.Abs(input.x) > 0.1f)
@@ -604,6 +616,77 @@ public class BoatController : NetworkBehaviour
         // se "queda en su sitio", la cubierta lo arrastra y puede atravesar el bote y caerse.
         // SyncTransforms actualiza esa posicion interna para que viaje con el bote.
         if (seMovio) Physics.SyncTransforms();
+    }
+
+    // ---------------- ZONA BLOQUEADA (tutorial del pescador) ----------------
+    [Header("Zona bloqueada (tutorial del pescador)")]
+    [Tooltip("Metros extra alrededor de la zona: el casco no es un punto, asi la punta no se mete")]
+    public float margenZonaBloqueada = 3f;
+
+    private bool hayZonaBloqueada = false;
+    private Bounds zonaBloqueada;
+
+    /// <summary>Solo el servidor (o sin red) mueve el bote. null = sin zona bloqueada.</summary>
+    public void SetZonaBloqueada(BoxCollider zona)
+    {
+        hayZonaBloqueada = zona != null;
+        if (!hayZonaBloqueada) return;
+
+        // Se calcula a mano (y no con collider.bounds) porque bounds vale cero si el objeto esta apagado
+        Transform t = zona.transform;
+        Vector3 centro = t.TransformPoint(zona.center);
+        Vector3 tam = Vector3.Scale(zona.size, t.lossyScale);
+        tam = new Vector3(Mathf.Abs(tam.x), Mathf.Abs(tam.y), Mathf.Abs(tam.z));
+        zonaBloqueada = new Bounds(centro, tam);
+        zonaBloqueada.Expand(new Vector3(margenZonaBloqueada * 2f, 0f, margenZonaBloqueada * 2f));
+    }
+
+    private bool DentroZonaBloqueada(Vector3 p)
+    {
+        if (!hayZonaBloqueada) return false;
+        // Solo cuenta el plano horizontal (la altura del bote no importa)
+        return p.x >= zonaBloqueada.min.x && p.x <= zonaBloqueada.max.x &&
+               p.z >= zonaBloqueada.min.z && p.z <= zonaBloqueada.max.z;
+    }
+
+    // ---------------- ZONA PERMITIDA (tutorial del conductor) ----------------
+    [Header("Zona permitida (tutorial del conductor)")]
+    [Tooltip("Metros que se achica la zona: el casco no es un punto, asi la punta no sale")]
+    public float margenZonaPermitida = 2f;
+
+    private bool hayZonaPermitida = false;
+    private Bounds zonaPermitida;
+
+    /// <summary>
+    /// Solo el servidor (o sin red). El bote no puede salir de esta caja (plano horizontal).
+    /// null = sin limite. Si el bote ya estaba fuera, puede moverse hasta entrar.
+    /// </summary>
+    public void SetZonaPermitida(BoxCollider zona)
+    {
+        hayZonaPermitida = zona != null;
+        if (!hayZonaPermitida) return;
+
+        Transform t = zona.transform;
+        Vector3 centro = t.TransformPoint(zona.center);
+        Vector3 tam = Vector3.Scale(zona.size, t.lossyScale);
+        tam = new Vector3(Mathf.Abs(tam.x), Mathf.Abs(tam.y), Mathf.Abs(tam.z));
+        tam.x = Mathf.Max(0.5f, tam.x - margenZonaPermitida * 2f);
+        tam.z = Mathf.Max(0.5f, tam.z - margenZonaPermitida * 2f);
+        zonaPermitida = new Bounds(centro, tam);
+    }
+
+    private bool DentroZonaPermitida(Vector3 p)
+    {
+        if (!hayZonaPermitida) return true;
+        return p.x >= zonaPermitida.min.x && p.x <= zonaPermitida.max.x &&
+               p.z >= zonaPermitida.min.z && p.z <= zonaPermitida.max.z;
+    }
+
+    /// <summary>Input que esta dando el conductor en ESTE dispositivo (botones + inclinacion).
+    /// Lo usa el tutorial del conductor para saber que movimientos hizo.</summary>
+    public Vector2 LeerInputConductor()
+    {
+        return ReadInput();
     }
 
     public void SnapTo(Vector3 pos, Quaternion rot)
