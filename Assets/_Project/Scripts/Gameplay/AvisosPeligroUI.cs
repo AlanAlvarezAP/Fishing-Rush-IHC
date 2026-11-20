@@ -15,6 +15,13 @@ public class AvisosPeligroUI : MonoBehaviour
     public Color colorTiburon = new Color(0.85f, 0.05f, 0.05f, 0.30f);
     public Color colorTambaleo = new Color(0.90f, 0.45f, 0.05f, 0.18f);
     public Color colorSinFondo = new Color(0f, 0f, 0f, 0f);
+    public Color colorDesconexion = new Color(0f, 0f, 0f, 0.55f);
+
+    /// <summary>
+    /// Aviso de desconexion (partida en pausa / reconectando). Lo escribe MenuMismaEscena en cada
+    /// dispositivo; mientras no sea null tapa a los demas avisos. null = sin aviso.
+    /// </summary>
+    public static string MensajeDesconexion = null;
 
     private ThirdPController[] jugadores = new ThirdPController[0];
     private BoatController bote;
@@ -81,7 +88,12 @@ public class AvisosPeligroUI : MonoBehaviour
         string mensaje = null;
         Color color = colorSinFondo;
 
-        if (!esConductor)
+        if (MensajeDesconexion != null)
+        {
+            mensaje = MensajeDesconexion;
+            color = colorDesconexion;
+        }
+        else if (!esConductor)
         {
             if (tiburon > 0f)
             {

@@ -40,6 +40,9 @@ public class TutorialConductorUI : MonoBehaviour
     private Estado estado = Estado.Slide;
     private int paso = 1; // 1..5
 
+    /// <summary>Paso con el que arranca al abrirse (1, o el que iba si se reconecto). Se usa una vez.</summary>
+    public int PasoAlAbrir { get; set; } = 1;
+
     private MenuMismaEscena menu;
     private BoatController bote;
     private ZonaTutorialConductor zona;
@@ -67,8 +70,22 @@ public class TutorialConductorUI : MonoBehaviour
 
         if (textoProgreso != null) FuenteSegura.Aplicar(textoProgreso);
 
-        paso = 1;
+        paso = Mathf.Clamp(PasoAlAbrir, 1, PASOS_CON_PRUEBA);
+        PasoAlAbrir = 1;
         MostrarSlide();
+    }
+
+    /// <summary>
+    /// Se cayo la red y volvio (la app siguio abierta): la PC habia terminado el tutorial, se le
+    /// vuelve a pedir el paso actual (el bote vuelve al inicio de ese paso).
+    /// </summary>
+    public void ReenviarPaso()
+    {
+        if (menu == null) menu = FindObjectOfType<MenuMismaEscena>();
+        if (menu == null) return;
+
+        Debug.Log($"[TUTORIAL CONDUCTOR] Reconectado: se vuelve a preparar el paso {paso}.");
+        menu.PedirPasoTutorialConductor(paso, estado == Estado.Probando);
     }
 
     private void OnDisable()
