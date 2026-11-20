@@ -410,6 +410,25 @@ public class FishCube : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// Servidor: alguien se desconecto en plena partida y se pierde la pesca en curso.
+    /// - Pez o tiburon enganchado / peleando: escapa (al quitarlo se libera la cana y el bloqueo).
+    /// - Pez acercandose al anzuelo: deja de acercarse y sigue nadando.
+    /// </summary>
+    public void CancelarPorDesconexion()
+    {
+        if (!EsAutoridad) return;
+
+        if (isFighting || isHooked)
+        {
+            StopAllCoroutines();
+            EscapeAndDespawn();
+            return;
+        }
+
+        if (isApproaching) AbortApproach(GetControllerFromHook(targetHook));
+    }
+
     private void AbortApproach(ThirdPController pc)
     {
         isApproaching = false;

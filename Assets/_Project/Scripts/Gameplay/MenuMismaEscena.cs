@@ -272,7 +272,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
             // Cliente (al conectarse por primera vez o al RECONECTARSE): toma el estado de la PC
             if (EsConductor())
             {
-                if (isGameStartedNet.Value) OcultarMenuYEmpezarLocal();
+                RestaurarPantallaConductorLocal(); // partida, su tutorial, su game over o el menu
             }
             else
             {
@@ -560,8 +560,11 @@ public partial class MenuMismaEscena : NetworkBehaviour
     {
         if (!IsServer) return;
 
+        // Pausa la partida si era uno de los jugadores (MenuMismaEscena.Desconexion.cs)
+        QuitarRolCliente(clientId);
+
         // El conductor se fue en pleno tutorial: se termina (el pescador vuelve al bote)
-        if (clientId == clienteTutorialConductor) FinTutorialConductorServidor();
+        if (clientId == clienteTutorialConductor) FinTutorialConductorServidor(false, true);
 
         if (clientId != clienteConductorListo) return;
 
@@ -620,7 +623,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
     public float TiempoRestanteRed()
     {
         if (!TiempoSincronizado) return 0f;
-        double restante = finPartidaNet.Value - NetworkManager.ServerTime.Time;
+        double restante = finPartidaNet.Value - AhoraParaTiempoDePartida(); // congelado en pausa
         return Mathf.Max(0f, (float)restante);
     }
 
@@ -688,6 +691,8 @@ public partial class MenuMismaEscena : NetworkBehaviour
 
     void Update()
     {
+        RevisarEsperaReconexionServidor();
+        ActualizarPausaLocal();
         ActualizarTutorialConductorServidor();
         ActualizarTextoEstadoHUD();
         ActualizarPingRed();
@@ -904,7 +909,11 @@ public partial class MenuMismaEscena : NetworkBehaviour
     {
         if (!IsServer || isGameStartedNet.Value) return;
 
-        if ((TipoJugador)rol == TipoJugador.Jugador2_ConductorTablet) conductorListoNet.Value = listo;
+        if ((TipoJugador)rol == TipoJugador.Jugador2_ConductorTablet)
+        {
+            conductorListoNet.Value = listo;
+            ConductorSalioDelGameOverServidor(); // Reiniciar (listo) o Volver al menu (no listo)
+        }
         else pescadorListoNet.Value = listo;
 
         Debug.Log($"[LISTOS] pescador={pescadorListoNet.Value} conductor={conductorListoNet.Value}");
@@ -930,7 +939,8 @@ public partial class MenuMismaEscena : NetworkBehaviour
         if (!IsServer) return;
 
         // Por si se fuerza el inicio (tecla Y) con el conductor en su tutorial
-        FinTutorialConductorServidor();
+        FinTutorialConductorServidor(false, false);
+        ConductorSalioDelGameOverServidor();
 
         pescadorListoNet.Value = false;
         conductorListoNet.Value = false;
@@ -959,6 +969,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
         if (registrandoNombresNet.Value) registrandoNombresNet.Value = false;
         IniciarRegistroPartida(duracion);
 
+        FijarRolesEnPartidaServidor();   // si alguno de estos se desconecta, se pausa
         isGameStartedNet.Value = true;   // los clientes empiezan por el OnValueChanged
         OcultarMenuYEmpezarLocal();
     }
@@ -1060,6 +1071,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
         if (IsSpawned && isGameStartedNet.Value) return; // durante la partida no hace nada
 
         AplicarMenuCompletoLocal();
+        MarcarTutorialConductorCompletadoServidor();
         if (IsSpawned && IsServer) MenuCompletoClientRpc();
     }
 
@@ -1451,6 +1463,8 @@ public partial class MenuMismaEscena : NetworkBehaviour
             isGameStartedNet.Value = false;
             pescadorListoNet.Value = false;
             conductorListoNet.Value = false;
+            ConductorEntroAlGameOverServidor();
+            if (desconexionFaltanNet.Value != 0) desconexionFaltanNet.Value = 0;
 
             MinaSpawner minaSpawnerFin = FindObjectOfType<MinaSpawner>();
             if (minaSpawnerFin != null) minaSpawnerFin.ClearAll();

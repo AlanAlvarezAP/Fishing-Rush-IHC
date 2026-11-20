@@ -35,6 +35,26 @@ public partial class MenuMismaEscena
     private byte pasoTutorialConductorOffline = 0;
 
     private byte PasoTutorialConductor => IsSpawned ? conductorTutorialPasoNet.Value : pasoTutorialConductorOffline;
+
+    // ---------------- ESTADO DEL CONDUCTOR GUARDADO EN LA PC (para cuando se reconecta) ----------------
+    // Si la tablet cierra la app pierde todo lo local: al volver, toma esto de la PC.
+    // Completo su tutorial (desbloquea Jugar)
+    private NetworkVariable<bool> conductorTutorialCompletadoNet = new NetworkVariable<bool>(
+        false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+    // Paso (1..4) en el que se desconecto en pleno tutorial: al volver sigue desde ahi. 0 = ninguno
+    private NetworkVariable<byte> conductorTutorialPendienteNet = new NetworkVariable<byte>(
+        0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+    // Estaba viendo su game over (hasta que toca Reiniciar o Volver al menu)
+    private NetworkVariable<bool> conductorEnGameOverNet = new NetworkVariable<bool>(
+        false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+
+    // Tablet: el tutorial se cierra como completado (lo usa CerrarTutorialConductorUI)
+    private bool finConductorCompletado = false;
+
+    private bool TutorialConductorAbierto => tutorialConductorUI != null && tutorialConductorUI.gameObject.activeSelf;
     public bool EnTutorialConductor => PasoTutorialConductor != 0;
 
     // ---------------- estado del servidor ----------------
@@ -46,7 +66,9 @@ public partial class MenuMismaEscena
 
     private GameObject prefabMinaCache, prefabPezCache, prefabTiburonCache;
 
-    private bool SoyServidorTutorial => !IsSpawned || IsServer;
+    // La PC, o el modo sin red (sin NetworkManager). Una tablet DESCONECTADA no cuenta: no debe
+    // mover el bote ni poner minas por su cuenta.
+    private bool SoyServidorTutorial => IsSpawned ? IsServer : NetworkManager.Singleton == null;
 
     // =====================================================================
     // RED
@@ -54,6 +76,7 @@ public partial class MenuMismaEscena
     private void SuscribirTutorialConductorRed()
     {
         conductorTutorialPasoNet.OnValueChanged += OnPasoTutorialConductorCambio;
+        conductorTutorialCompletadoNet.OnValueChanged += OnTutorialConductorCompletadoCambio;
         if (!IsServer) AplicarZonaTutorialConductorLocal(conductorTutorialPasoNet.Value);
         else if (conductorTutorialPasoNet.Value != pasoTutorialConductorOffline) conductorTutorialPasoNet.Value = pasoTutorialConductorOffline;
     }
@@ -61,6 +84,81 @@ public partial class MenuMismaEscena
     private void DesuscribirTutorialConductorRed()
     {
         conductorTutorialPasoNet.OnValueChanged -= OnPasoTutorialConductorCambio;
+        conductorTutorialCompletadoNet.OnValueChanged -= OnTutorialConductorCompletadoCambio;
+    }
+
+    private void OnTutorialConductorCompletadoCambio(bool previo, bool nuevo)
+    {
+        if (!EsConductor() || !nuevo) return;
+        tutorialCompletado = true;
+        if (panelMenuConductor != null && panelMenuConductor.activeInHierarchy) ActualizarBotonJugarConductor();
+    }
+
+    /// <summary>
+    /// Tablet, al conectarse o RECONECTARSE: vuelve a la pantalla en la que estaba segun la PC
+    /// (partida, su tutorial en el paso en que iba, su game over o el menu).
+    /// </summary>
+    private void RestaurarPantallaConductorLocal()
+    {
+        if (conductorTutorialCompletadoNet.Value) tutorialCompletado = true;
+        // Lo completo mientras estaba sin red: se le avisa a la PC
+        else if (tutorialCompletado) ConductorTutorialCompletadoServerRpc();
+
+        if (isGameStartedNet.Value)
+        {
+            OcultarMenuYEmpezarLocal();
+            return;
+        }
+
+        // Solo se cayo la red (la app siguio abierta): el panel sigue donde estaba, se le vuelve
+        // a pedir a la PC que prepare ese paso (lo habia terminado al desconectarse)
+        if (TutorialConductorAbierto)
+        {
+            tutorialConductorUI.ReenviarPaso();
+            return;
+        }
+
+        // Cerro la app en pleno tutorial: sigue desde el paso en que iba
+        byte pendiente = conductorTutorialPendienteNet.Value;
+        if (pendiente >= 1 && pendiente <= 4 && !tutorialCompletado)
+        {
+            Debug.Log($"[TUTORIAL CONDUCTOR] Reconectado: sigue en el paso {pendiente}.");
+            AbrirTutorialConductorLocal(pendiente);
+            return;
+        }
+
+        if (conductorEnGameOverNet.Value)
+        {
+            MostrarGameOverLocal();
+            return;
+        }
+
+        if (panelMenuConductor != null && panelMenuConductor.activeInHierarchy) ActualizarBotonJugarConductor();
+    }
+
+    /// <summary>Servidor: el conductor ya no esta en su game over (toco Reiniciar o Volver, o empezo la partida).</summary>
+    private void ConductorSalioDelGameOverServidor()
+    {
+        if (IsSpawned && IsServer && conductorEnGameOverNet.Value) conductorEnGameOverNet.Value = false;
+    }
+
+    /// <summary>Servidor: la partida termino, el conductor queda en su game over.</summary>
+    private void ConductorEntroAlGameOverServidor()
+    {
+        if (IsSpawned && IsServer && !conductorEnGameOverNet.Value) conductorEnGameOverNet.Value = true;
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void ConductorTutorialCompletadoServerRpc()
+    {
+        MarcarTutorialConductorCompletadoServidor();
+    }
+
+    /// <summary>Servidor: tutorial del conductor hecho (tecla T, o lo completo sin red). Ya no hay nada que retomar.</summary>
+    private void MarcarTutorialConductorCompletadoServidor()
+    {
+        if (IsSpawned && IsServer && !conductorTutorialCompletadoNet.Value) conductorTutorialCompletadoNet.Value = true;
+        if (IsSpawned && IsServer && conductorTutorialPendienteNet.Value != 0) conductorTutorialPendienteNet.Value = 0;
     }
 
     private void OnPasoTutorialConductorCambio(byte previo, byte nuevo)
@@ -92,11 +190,11 @@ public partial class MenuMismaEscena
         else PasoTutorialConductorServidor(paso, probando);
     }
 
-    /// <summary>Tablet: termino (o cancelo) su tutorial.</summary>
-    public void PedirFinTutorialConductor()
+    /// <summary>Tablet: termino (completado) o cancelo su tutorial.</summary>
+    public void PedirFinTutorialConductor(bool completado)
     {
-        if (IsSpawned && !IsServer) FinTutorialConductorServerRpc();
-        else FinTutorialConductorServidor();
+        if (IsSpawned && !IsServer) FinTutorialConductorServerRpc(completado);
+        else FinTutorialConductorServidor(completado, false);
     }
 
     [ServerRpc(RequireOwnership = false)]
@@ -107,9 +205,9 @@ public partial class MenuMismaEscena
     }
 
     [ServerRpc(RequireOwnership = false)]
-    private void FinTutorialConductorServerRpc()
+    private void FinTutorialConductorServerRpc(bool completado)
     {
-        FinTutorialConductorServidor();
+        FinTutorialConductorServidor(completado, false);
     }
 
     // =====================================================================
@@ -123,6 +221,7 @@ public partial class MenuMismaEscena
 
         bool empezando = !EnTutorialConductor;
         SetPasoTutorialConductor((byte)paso);
+        if (IsSpawned && conductorTutorialPendienteNet.Value != 0) conductorTutorialPendienteNet.Value = 0; // ya lo retomo
         if (empezando) EntrarTutorialConductorServidor();
 
         bool nuevoPaso = empezando || paso != pasoPreparadoConductor;
@@ -165,12 +264,29 @@ public partial class MenuMismaEscena
         }
     }
 
-    private void FinTutorialConductorServidor()
+    /// <summary>
+    /// completado: lo termino (se guarda en la PC para cuando se reconecte).
+    /// porDesconexion: la tablet se desconecto en pleno tutorial: se guarda el paso para retomarlo.
+    /// </summary>
+    private void FinTutorialConductorServidor(bool completado, bool porDesconexion)
     {
         if (!SoyServidorTutorial) return;
+
+        // El slide final (5) ya es tutorial completado aunque se haya desconectado ahi
+        if (porDesconexion && pasoPreparadoConductor >= 5) completado = true;
+
+        if (IsSpawned && IsServer)
+        {
+            if (completado && !conductorTutorialCompletadoNet.Value) conductorTutorialCompletadoNet.Value = true;
+
+            byte pendiente = (byte)(porDesconexion && !completado && EnTutorialConductor
+                ? Mathf.Clamp(pasoPreparadoConductor, 1, 4) : 0);
+            if (conductorTutorialPendienteNet.Value != pendiente) conductorTutorialPendienteNet.Value = pendiente;
+        }
+
         if (!EnTutorialConductor) return;
 
-        Debug.Log("[TUTORIAL CONDUCTOR] Termina.");
+        Debug.Log($"[TUTORIAL CONDUCTOR] Termina (completado={completado}, desconexion={porDesconexion}).");
 
         LimpiarObjetosTutorialConductor();
         SetPasoTutorialConductor(0);
@@ -384,7 +500,8 @@ public partial class MenuMismaEscena
     // =====================================================================
     // TABLET (local)
     // =====================================================================
-    private void AbrirTutorialConductorLocal()
+    /// <summary>Tablet: abre su tutorial (paso 1, o el paso en que iba si se reconecto).</summary>
+    private void AbrirTutorialConductorLocal(int paso = 1)
     {
         if (EsperandoConexion()) return;
 
@@ -411,7 +528,8 @@ public partial class MenuMismaEscena
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
-        tutorialConductorUI.gameObject.SetActive(true); // su OnEnable arranca el paso 1
+        tutorialConductorUI.PasoAlAbrir = paso;
+        tutorialConductorUI.gameObject.SetActive(true); // su OnEnable arranca en ese paso
     }
 
     /// <summary>Tablet: muestra u oculta los botones del bote (durante las pruebas).</summary>
@@ -425,7 +543,8 @@ public partial class MenuMismaEscena
     public void TerminarTutorialConductorLocal(bool completado)
     {
         if (completado) MarcarTutorialCompletadoLocal();
-        MostrarMenuConductorLocal(); // cierra el panel y avisa a la PC
+        finConductorCompletado = completado;
+        MostrarMenuConductorLocal(); // cierra el panel y avisa a la PC (completado o no)
     }
 
     /// <summary>Tablet: cierra el panel del tutorial si estaba abierto y avisa a la PC.</summary>
@@ -433,9 +552,12 @@ public partial class MenuMismaEscena
     {
         if (tutorialConductorUI == null || !tutorialConductorUI.gameObject.activeSelf) return;
 
+        bool completado = finConductorCompletado;
+        finConductorCompletado = false;
+
         tutorialConductorUI.gameObject.SetActive(false);
         SetControlesTutorialConductor(false);
-        PedirFinTutorialConductor();
+        PedirFinTutorialConductor(completado);
     }
 
     /// <summary>Tablet: el boton Jugar solo aparece con el tutorial del conductor completado.</summary>
