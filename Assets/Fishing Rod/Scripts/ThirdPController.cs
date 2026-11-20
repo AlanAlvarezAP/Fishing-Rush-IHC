@@ -97,6 +97,7 @@ public class ThirdPController : NetworkBehaviour
     public GameObject fishingRod;
     [SerializeField] private GameObject lineObject;
     [SerializeField] private GameObject hookObject;
+    public Transform Anzuelo => hookObject != null ? hookObject.transform : null; // lo usa el tutorial
     [SerializeField] private Transform rodTip;
     [SerializeField] private Collider hookCollider;
 
@@ -183,6 +184,51 @@ public class ThirdPController : NetworkBehaviour
     }
 
     public bool BloqueadoPorTiburon => SegundosBloqueoTiburon > 0f;
+
+    /// <summary>Lanzamientos completados desde que se cargo la escena (solo cuenta quien
+    /// procesa el input: la PC o el modo sin red).</summary>
+    public int LanzamientosHechos { get; private set; }
+
+    private Coroutine rutinaLanzamiento;
+
+    /// <summary>
+    /// Sale del modo pesca como si se desequipara la cana (y recoge el anzuelo al instante si
+    /// estaba afuera). Lo usan los menus y los slides del tutorial para que el pescador aparezca
+    /// normal en la parte siguiente. Llamarlo en el dueno (la PC); los demas se enteran por red.
+    /// </summary>
+    public void ForzarSalirModoPesca()
+    {
+        if (rutinaLanzamiento != null)
+        {
+            StopCoroutine(rutinaLanzamiento);
+            rutinaLanzamiento = null;
+        }
+
+        if (alreadyCast || isReeling || isCastingInProcess) FinishReeling(); // anzuelo de vuelta a la punta
+        alreadyCast = false;
+        isReeling = false;
+        isCastingInProcess = false;
+        ResetWiiCastState();
+
+        if (!isFishing) return;
+
+        if (animator != null) animator.SetBool("startFishing", false);
+        isFishing = false;
+        isHookOccupied = false;
+        currentRequestedGesture = FishCube.FishingGesture.None;
+        if (fishingRod != null) fishingRod.SetActive(false);
+        if (lineObject != null) lineObject.SetActive(false);
+        if (hookObject != null) hookObject.SetActive(false);
+
+        if (FishingHUDManager.Instance != null) FishingHUDManager.Instance.HideAll();
+
+        if (IsSpawned)
+        {
+            // LateUpdate no corre si el componente esta apagado (menus/slides): se publica aqui
+            if (IsOwner && netIsFishing.Value) netIsFishing.Value = false;
+            if (IsServer) SetFishingVisualsClientRpc(false, Vector3.zero, Quaternion.identity);
+        }
+    }
 
     public void BloquearPorTiburon(float segundos)
     {
@@ -491,7 +537,7 @@ public class ThirdPController : NetworkBehaviour
             animator.SetTrigger("cast");
             SyncAnimTrigger(0);
             ReproducirSonidoLanzamiento();
-            StartCoroutine(ExecuteCastWithDelay(debugCalculatedForce));
+            rutinaLanzamiento = StartCoroutine(ExecuteCastWithDelay(debugCalculatedForce));
         }
 
         // --- RECOGIDA ---
@@ -632,6 +678,7 @@ public class ThirdPController : NetworkBehaviour
 
         isCastingInProcess = false;
         alreadyCast = true;
+        LanzamientosHechos++; // lo usa el tutorial del pescador (prueba de 3 lanzamientos)
         isHookOccupied = false;
         currentRequestedGesture = FishCube.FishingGesture.None;
 
@@ -952,6 +999,7 @@ public class ThirdPController : NetworkBehaviour
         if (fishingRod != null) fishingRod.SetActive(active);
         if (lineObject != null) lineObject.SetActive(active);
         if (verletScript != null && active) verletScript.ResetRope();
+        if (animator != null) animator.SetBool("startFishing", active); // por si LateUpdate esta apagado
     }
 
     void LateUpdate()

@@ -31,8 +31,8 @@ public class FishCube : NetworkBehaviour
     [SerializeField] private FishAlive.SwimConfig swimAgileConfig;
 
     [Header("Mecanica de Gestos")]
-    [SerializeField] private int totalTurns = 4;
-    [SerializeField] private int requiredSuccesses = 3;
+    [SerializeField] private int totalTurns = 3;
+    [SerializeField] private int requiredSuccesses = 2;
     private int successfulFollows = 0;
 
     [Header("Debug")]
@@ -41,7 +41,7 @@ public class FishCube : NetworkBehaviour
     [Header("Tiburon: mordida (bloquea la cana)")]
     [SerializeField] private bool esTiburon = false;
     [Tooltip("Segundos que queda bloqueada la cana cuando el tiburon muerde el anzuelo")]
-    [SerializeField] private float segundosBloqueo = 8f;
+    [SerializeField] private float segundosBloqueo = 5f;
     [Tooltip("Segundos que le quita al bloqueo cada patron bien hecho")]
     [SerializeField] private float segundosPorPatron = 1f;
 
@@ -62,6 +62,23 @@ public class FishCube : NetworkBehaviour
     [SerializeField] private float esperaEntreEmbestidas = 12f;
 
     public bool EsTiburon => esTiburon;
+
+    /// <summary>false = este tiburon no persigue ni choca al bote (los del tutorial del pescador:
+    /// el bote puede estar haciendo su propio tutorial en la otra mitad del lago).</summary>
+    public bool PermitirEmbestida { get; set; } = true;
+
+    /// <summary>
+    /// Tiburones del tutorial del conductor (solo en la PC, despues de Spawn): van por el bote
+    /// casi de inmediato, desde mas lejos y sin rendirse rapido, para que choque si o si.
+    /// </summary>
+    public void ConfigurarEmbestidaTutorial(float radio, float duracionMax)
+    {
+        PermitirEmbestida = true;
+        radioEmbestida = radio;
+        duracionMaxEmbestida = duracionMax;
+        proximaEmbestida = Time.time + 1f;
+        proximoChoque = 0f;
+    }
 
     private TiburonVisual tiburonVisual;
     private bool embistiendo = false;
@@ -739,7 +756,7 @@ public class FishCube : NetworkBehaviour
         if (!EsAutoridad || fishMotion == null) return false;
 
         BoatController bote = ObtenerBote();
-        if (bote == null || !bote.MovimientoHabilitado)
+        if (bote == null || !bote.MovimientoHabilitado || !PermitirEmbestida)
         {
             if (embistiendo || huyendo) VolverANadar();
             return false;

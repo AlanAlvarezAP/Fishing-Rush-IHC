@@ -74,6 +74,26 @@ public partial class MenuMismaEscena : NetworkBehaviour
 
     private bool tutorialCompletado = false;
 
+    [Header("Tutorial del Pescador (lo crea Fishing Rush > Crear tutorial del pescador)")]
+    [Tooltip("Raiz con la plataforma, sus paredes, la barrera y los puntos. Solo se activa durante el tutorial del pescador (en todos los dispositivos)")]
+    public GameObject zonaTutorialPescador;
+    [Tooltip("Donde aparece el pescador sobre la plataforma (su rotacion Y es hacia donde mira)")]
+    public Transform puntoInicioTutorialPescador;
+    [Tooltip("Mitad del lago del pescador: el bote no puede entrar mientras dura su tutorial")]
+    public BoxCollider zonaBloqueoBoteTutorial;
+    [Tooltip("Donde se pone Canvas_Menu (los slides) durante el tutorial del pescador. Muevelo si se ve mal. Si esta vacio se calcula solo")]
+    public Transform puntoCanvasTutorialPescador;
+
+    // Pose original de Canvas_Menu (encima del bote), para devolverlo al salir del tutorial
+    private Vector3 canvasMenuPosOriginal;
+    private Quaternion canvasMenuRotOriginal;
+    private bool canvasMenuPoseGuardada = false;
+
+    // true mientras el pescador hace su tutorial (en la plataforma, fuera del bote)
+    private bool enTutorialPescador = false;
+    public bool EnTutorialPescador => enTutorialPescador;
+    private Transform padreOriginalJugador;
+
     [SerializeField] private TextMeshProUGUI finalScoreText;
 
     [Header("UI Estado Jugador")]
@@ -93,6 +113,12 @@ public partial class MenuMismaEscena : NetworkBehaviour
 
     [Tooltip("Donde aparece el pescador dentro del bote (cae desde esa altura). Dejar x en 0: el pasillo es angosto y con x distinto de 0 queda subido en la baranda. z entre -2 y 0")]
     public Vector3 posicionInicialPescador = new Vector3(0f, 5.0f, -0.9f);
+
+    // Vista fija en los menus: rotaciones locales iniciales (las de la escena) de las camaras y
+    // del modelo del pescador. Se restauran cada vez que se muestra un canvas (menu, tutorial,
+    // Wiimote, game over), asi la vista no depende de hacia donde se miro durante la partida.
+    private Transform[] vistaMenuHijos;
+    private Quaternion[] vistaMenuRotHijos;
 
     private Button[] activeButtons;
     private int selectedButtonIndex = 0;
@@ -142,6 +168,32 @@ public partial class MenuMismaEscena : NetworkBehaviour
         false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
     );
 
+    // Slides del tutorial: van por aqui y no por las variables de TutorialSlidesUI, porque
+    // Panel_Tutorial empieza apagado en la escena y Netcode no spawnea su NetworkObject
+    // (en el cliente los slides nunca cambiaban ni desaparecian).
+    private NetworkVariable<int> tutorialSlideNet = new NetworkVariable<int>(
+        0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+    private NetworkVariable<bool> tutorialSlideVisibleNet = new NetworkVariable<bool>(
+        true, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+    private NetworkVariable<byte> tutorialPruebaNet = new NetworkVariable<byte>(
+        0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+    private NetworkVariable<int> tutorialProgresoNet = new NetworkVariable<int>(
+        0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+
+    public int TutorialSlideRed => tutorialSlideNet.Value;
+    public bool TutorialSlideVisibleRed => tutorialSlideVisibleNet.Value;
+    public byte TutorialPruebaRed => tutorialPruebaNet.Value;
+    public int TutorialProgresoRed => tutorialProgresoNet.Value;
+
+    // Tutorial del pescador en curso: activa la plataforma/barrera en TODOS (tambien el conductor)
+    private NetworkVariable<bool> tutorialPescadorNet = new NetworkVariable<bool>(
+        false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server
+    );
+
     // Servidor: cliente que marco "listo" como conductor (para liberarlo si se desconecta)
     private ulong clienteConductorListo = ulong.MaxValue;
 
@@ -185,8 +237,23 @@ public partial class MenuMismaEscena : NetworkBehaviour
         pescadorListoNet.OnValueChanged += OnListoCambio;
         conductorListoNet.OnValueChanged += OnListoCambio;
         isGameStartedNet.OnValueChanged += OnPartidaIniciadaCambio;
+        tutorialPescadorNet.OnValueChanged += OnTutorialPescadorCambio;
+        tutorialSlideNet.OnValueChanged += OnTutorialSlideRedCambio;
+        tutorialSlideVisibleNet.OnValueChanged += OnTutorialVisibleRedCambio;
+        tutorialPruebaNet.OnValueChanged += OnTutorialPruebaRedCambio;
+        tutorialProgresoNet.OnValueChanged += OnTutorialProgresoRedCambio;
+        SuscribirTutorialConductorRed();
 
         AplicarTextoEstado(TextoEstado(estadoJugadorNet.Value));
+
+        if (IsServer)
+        {
+            if (tutorialPescadorNet.Value != enTutorialPescador) tutorialPescadorNet.Value = enTutorialPescador;
+        }
+        else
+        {
+            AplicarZonaTutorialPescadorLocal(tutorialPescadorNet.Value);
+        }
 
         InicializarLogsRed(); // quien se conecta y ping (MenuMismaEscena.Red.cs)
         InicializarTableroRed();
@@ -194,6 +261,11 @@ public partial class MenuMismaEscena : NetworkBehaviour
         if (IsServer)
         {
             NetworkManager.OnClientDisconnectCallback += OnClienteDesconectado;
+
+            // El Start coloco al pescador ANTES de que existiera la red (sin Teleport del
+            // NetworkTransform). Se vuelve a fijar ya en red para que el celular VR reciba
+            // exactamente la misma vista de menu que luego da la tecla T o volver al menu.
+            if (!isGameStartedNet.Value && !tutorialEnPruebaNet.Value && !EsConductor()) ApagarJugador();
         }
         else
         {
@@ -222,6 +294,12 @@ public partial class MenuMismaEscena : NetworkBehaviour
         pescadorListoNet.OnValueChanged -= OnListoCambio;
         conductorListoNet.OnValueChanged -= OnListoCambio;
         isGameStartedNet.OnValueChanged -= OnPartidaIniciadaCambio;
+        tutorialPescadorNet.OnValueChanged -= OnTutorialPescadorCambio;
+        tutorialSlideNet.OnValueChanged -= OnTutorialSlideRedCambio;
+        tutorialSlideVisibleNet.OnValueChanged -= OnTutorialVisibleRedCambio;
+        tutorialPruebaNet.OnValueChanged -= OnTutorialPruebaRedCambio;
+        tutorialProgresoNet.OnValueChanged -= OnTutorialProgresoRedCambio;
+        DesuscribirTutorialConductorRed();
 
         if (NetworkManager != null) NetworkManager.OnClientDisconnectCallback -= OnClienteDesconectado;
         FinalizarLogsRed();
@@ -255,10 +333,236 @@ public partial class MenuMismaEscena : NetworkBehaviour
         if (nuevo) OcultarMenuYEmpezarLocal();
     }
 
+    private void OnTutorialPescadorCambio(bool anterior, bool nuevo)
+    {
+        if (IsServer) return; // la PC ya lo aplico en SetTutorialPescador
+        AplicarZonaTutorialPescadorLocal(nuevo);
+    }
+
+    // =====================================================================
+    // SLIDES DEL TUTORIAL POR RED (los escribe TutorialSlidesUI en la PC)
+    // =====================================================================
+    public void PublicarSlideTutorial(int slide, bool visible)
+    {
+        if (!IsSpawned || !IsServer) return;
+        if (tutorialSlideNet.Value != slide) tutorialSlideNet.Value = slide;
+        if (tutorialSlideVisibleNet.Value != visible) tutorialSlideVisibleNet.Value = visible;
+    }
+
+    public void PublicarPruebaTutorial(byte prueba, int progreso)
+    {
+        if (!IsSpawned || !IsServer) return;
+        if (tutorialPruebaNet.Value != prueba) tutorialPruebaNet.Value = prueba;
+        if (tutorialProgresoNet.Value != progreso) tutorialProgresoNet.Value = progreso;
+    }
+
+    private TutorialSlidesUI ObtenerTutorialSlides()
+    {
+        if (panelTutorial != null)
+        {
+            TutorialSlidesUI t = panelTutorial.GetComponentInChildren<TutorialSlidesUI>(true);
+            if (t != null) return t;
+        }
+        return FindObjectOfType<TutorialSlidesUI>(true);
+    }
+
+    private void OnTutorialSlideRedCambio(int previo, int nuevo) { RefrescarSlidesDesdeRed(); }
+    private void OnTutorialVisibleRedCambio(bool previo, bool nuevo) { RefrescarSlidesDesdeRed(); }
+    private void OnTutorialPruebaRedCambio(byte previo, byte nuevo) { RefrescarProgresoDesdeRed(); }
+    private void OnTutorialProgresoRedCambio(int previo, int nuevo) { RefrescarProgresoDesdeRed(); }
+
+    private void RefrescarSlidesDesdeRed()
+    {
+        if (IsServer) return; // la PC ya lo aplico
+        TutorialSlidesUI t = ObtenerTutorialSlides();
+        if (t != null) t.AplicarEstadoRed();
+    }
+
+    private void RefrescarProgresoDesdeRed()
+    {
+        if (IsServer) return;
+        TutorialSlidesUI t = ObtenerTutorialSlides();
+        if (t != null) t.AplicarProgresoRed();
+    }
+
+    // =====================================================================
+    // TUTORIAL DEL PESCADOR: plataforma en su mitad del lago, fuera del bote
+    // =====================================================================
+
+    /// <summary>Solo visual/estado local: enciende o apaga la plataforma, paredes y barrera.</summary>
+    private void AplicarZonaTutorialPescadorLocal(bool activo)
+    {
+        enTutorialPescador = activo;
+        if (zonaTutorialPescador != null && zonaTutorialPescador.activeSelf != activo) zonaTutorialPescador.SetActive(activo);
+        MoverCanvasMenuTutorial(activo);
+    }
+
+    /// <summary>
+    /// Canvas_Menu esta fijo en el mundo, delante del pescador en el bote. En el tutorial del
+    /// pescador se lleva delante de la plataforma (y al salir se devuelve). Es local en cada
+    /// dispositivo: el canvas no es de red.
+    /// </summary>
+    private void MoverCanvasMenuTutorial(bool enPlataforma)
+    {
+        if (canvasMenu == null) return;
+        Transform c = canvasMenu.transform;
+
+        if (!canvasMenuPoseGuardada)
+        {
+            canvasMenuPosOriginal = c.position;
+            canvasMenuRotOriginal = c.rotation;
+            canvasMenuPoseGuardada = true;
+        }
+
+        if (!enPlataforma)
+        {
+            c.SetPositionAndRotation(canvasMenuPosOriginal, canvasMenuRotOriginal);
+            return;
+        }
+
+        if (puntoCanvasTutorialPescador != null)
+        {
+            c.SetPositionAndRotation(puntoCanvasTutorialPescador.position, puntoCanvasTutorialPescador.rotation);
+            return;
+        }
+
+        // Sin punto asignado: misma posicion relativa que tiene con el pescador en el bote
+        if (puntoInicioTutorialPescador == null || boteObjeto == null) return;
+
+        GuardarPosicionesIniciales();
+        Vector3 refBote = botePosInicial + boteRotInicial * Vector3.Scale(boteObjeto.transform.lossyScale, posicionInicialPescador);
+        Quaternion yawBote = Quaternion.Euler(0f, boteRotInicial.eulerAngles.y, 0f);
+        Quaternion yawPunto = Quaternion.Euler(0f, puntoInicioTutorialPescador.eulerAngles.y, 0f);
+        Quaternion giro = yawPunto * Quaternion.Inverse(yawBote);
+
+        c.SetPositionAndRotation(puntoInicioTutorialPescador.position + giro * (canvasMenuPosOriginal - refBote),
+                                 giro * canvasMenuRotOriginal);
+    }
+
+    /// <summary>
+    /// Entra o sale del tutorial del pescador.
+    /// - PC (o sin red): activa la zona, lo publica a todos, bloquea la mitad del lago para el bote
+    ///   y saca al pescador del bote (o lo devuelve).
+    /// - Celular VR: solo la parte local (la PC le manda el resto por red).
+    /// </summary>
+    private void SetTutorialPescador(bool activo)
+    {
+        AplicarZonaTutorialPescadorLocal(activo);
+
+        if (IsSpawned && !IsServer) return;
+
+        if (IsSpawned && tutorialPescadorNet.Value != activo) tutorialPescadorNet.Value = activo;
+
+        if (boteObjeto != null)
+        {
+            BoatController bc = boteObjeto.GetComponent<BoatController>();
+            if (bc != null) bc.SetZonaBloqueada(activo ? zonaBloqueoBoteTutorial : null);
+        }
+
+        // Con el conductor en su tutorial el pescador sigue fuera del bote al terminar el suyo
+        CambiarPadreJugador(activo || EnTutorialConductor);
+    }
+
+    /// <summary>
+    /// Servidor (o sin red): saca al pescador del bote (fueraDelBote = true) o lo vuelve a poner.
+    /// En red se usa TrySetParent: Netcode replica el cambio de padre al celular.
+    /// </summary>
+    private void CambiarPadreJugador(bool fueraDelBote)
+    {
+        GarantizarJugador();
+        if (playerController == null) return;
+
+        Transform t = playerController.transform;
+        if (padreOriginalJugador == null && t.parent != null) padreOriginalJugador = t.parent;
+
+        Transform padreDeseado = fueraDelBote ? null : (padreOriginalJugador != null ? padreOriginalJugador : (boteObjeto != null ? boteObjeto.transform : null));
+        if (t.parent == padreDeseado) return;
+
+        NetworkObject no = playerController.GetComponent<NetworkObject>();
+        if (no != null && no.IsSpawned && !IsServer) return; // el padre lo decide la PC
+
+        CharacterController cc = playerController.GetComponent<CharacterController>();
+        bool ccEncendido = cc != null && cc.enabled;
+        if (cc != null) cc.enabled = false;
+
+        bool hecho;
+
+        if (no != null && no.IsSpawned)
+        {
+            hecho = padreDeseado == null ? no.TryRemoveParent(true) : no.TrySetParent(padreDeseado, true);
+        }
+        else
+        {
+            t.SetParent(padreDeseado, true);
+            hecho = true;
+        }
+
+        if (!hecho)
+        {
+            Debug.LogWarning($"[TUTORIAL] No se pudo cambiar el padre del pescador (fueraDelBote={fueraDelBote}).");
+        }
+        else
+        {
+            Debug.Log(fueraDelBote ? "[TUTORIAL] Pescador fuera del bote (plataforma)." : "[TUTORIAL] Pescador de vuelta en el bote.");
+        }
+
+        Physics.SyncTransforms();
+        if (cc != null) cc.enabled = ccEncendido;
+    }
+
+    /// <summary>Coloca al pescador sobre la plataforma del tutorial (equivale a ResetearPosicionesOriginales).</summary>
+    private void ColocarJugadorEnPlataforma()
+    {
+        if (rodObjeto != null) rodObjeto.SetActive(true);
+
+        GarantizarJugador();
+        if (playerController == null) return;
+
+        if (puntoInicioTutorialPescador == null)
+        {
+            Debug.LogWarning("[TUTORIAL] Falta puntoInicioTutorialPescador: usa Fishing Rush > Crear tutorial del pescador.");
+            return;
+        }
+
+        CharacterController cc = playerController.GetComponent<CharacterController>();
+        if (cc != null) cc.enabled = false;
+
+        Transform t = playerController.transform;
+        t.SetPositionAndRotation(puntoInicioTutorialPescador.position,
+                                 Quaternion.Euler(0f, puntoInicioTutorialPescador.eulerAngles.y, 0f));
+
+        Physics.SyncTransforms();
+        TeleportRedJugador();
+
+        if (cc != null && ConfigJugador.RolActual == TipoJugador.Jugador1_PescadorVR) cc.enabled = true;
+    }
+
+    /// <summary>
+    /// Avisa al NetworkTransform que el jugador se teletransporto (sin interpolar).
+    /// OJO: el NetworkTransform del pescador esta en InLocalSpace, asi que Teleport recibe la
+    /// posicion LOCAL. Antes se le pasaba la mundial y el jugador quedaba desplazado
+    /// (por eso "saltaba" de sitio cuando se reposicionaba ya con la red activa).
+    /// </summary>
+    private void TeleportRedJugador()
+    {
+        if (playerController == null) return;
+
+        var nt = playerController.GetComponent<Unity.Netcode.Components.NetworkTransform>();
+        if (nt == null || !nt.IsSpawned || !nt.CanCommitToTransform) return;
+
+        Transform t = nt.transform;
+        if (nt.InLocalSpace) nt.Teleport(t.localPosition, t.localRotation, t.localScale);
+        else nt.Teleport(t.position, t.rotation, t.localScale);
+    }
+
     /// <summary>Servidor: si se desconecta el cliente que estaba "listo" como conductor, se libera.</summary>
     private void OnClienteDesconectado(ulong clientId)
     {
         if (!IsServer) return;
+
+        // El conductor se fue en pleno tutorial: se termina (el pescador vuelve al bote)
+        if (clientId == clienteTutorialConductor) FinTutorialConductorServidor();
+
         if (clientId != clienteConductorListo) return;
 
         clienteConductorListo = ulong.MaxValue;
@@ -341,6 +645,9 @@ public partial class MenuMismaEscena : NetworkBehaviour
         if (panelWiimote != null) panelWiimote.SetActive(false);
         if (panelTutorial != null) panelTutorial.SetActive(false);
         if (panelEsperandoConductor != null) panelEsperandoConductor.SetActive(false);
+        if (zonaTutorialPescador != null) zonaTutorialPescador.SetActive(false);
+        if (zonaTutorialConductor != null) zonaTutorialConductor.gameObject.SetActive(false);
+        if (tutorialConductorUI != null) tutorialConductorUI.gameObject.SetActive(false);
 
         if (canvasGameOverConductor != null) canvasGameOverConductor.SetActive(false);
         if (panelEsperaConductor != null) panelEsperaConductor.SetActive(false);
@@ -373,6 +680,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
         Cursor.visible = true;
 
         GuardarPosicionesIniciales();
+        GuardarVistaMenuPescador(); // antes de que nada gire las camaras
 
         ApagarJugador();
         MostrarMenu();
@@ -380,6 +688,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
 
     void Update()
     {
+        ActualizarTutorialConductorServidor();
         ActualizarTextoEstadoHUD();
         ActualizarPingRed();
 
@@ -610,12 +919,18 @@ public partial class MenuMismaEscena : NetworkBehaviour
         }
     }
 
-    public bool PartidaEnCurso => !IsSpawned || isGameStartedNet.Value;
+    // Con red manda isGameStartedNet. Sin red (pruebas en el editor) se usa esta bandera local,
+    // asi en el menu y el tutorial no aparecen peces ni tiburones del lago.
+    private bool partidaLocalEnCurso = false;
+    public bool PartidaEnCurso => IsSpawned ? isGameStartedNet.Value : partidaLocalEnCurso;
 
     /// <summary>Solo en la PC: arranca la partida en todos los dispositivos.</summary>
     private void IniciarPartidaServidor()
     {
         if (!IsServer) return;
+
+        // Por si se fuerza el inicio (tecla Y) con el conductor en su tutorial
+        FinTutorialConductorServidor();
 
         pescadorListoNet.Value = false;
         conductorListoNet.Value = false;
@@ -759,7 +1074,12 @@ public partial class MenuMismaEscena : NetworkBehaviour
     {
         MarcarTutorialCompletadoLocal();
 
-        if (EsConductor()) return; // el menu del conductor ya es el completo
+        if (EsConductor())
+        {
+            // Aparece el boton Jugar del conductor si esta viendo su menu
+            if (panelMenuConductor != null && panelMenuConductor.activeInHierarchy) ActualizarBotonJugarConductor();
+            return;
+        }
 
         // Solo se refresca si se esta viendo el panel inicial (Tutorial / Salir)
         if (panelIniciarMenu != null && panelIniciarMenu.activeInHierarchy)
@@ -770,6 +1090,13 @@ public partial class MenuMismaEscena : NetworkBehaviour
 
     private void OcultarMenuYEmpezarLocal()
     {
+        partidaLocalEnCurso = true;
+
+        if (EsConductor()) CerrarTutorialConductorUI();
+
+        // Por si la partida empieza con el pescador en su tutorial (ej. tecla Y): vuelve al bote
+        if (enTutorialPescador) SetTutorialPescador(false);
+
         SetPantallaPescadorServidor(PantallaPescador.Juego);
         AjustarVolumenMusica(volumenJuego);
         Time.timeScale = 1f;
@@ -911,8 +1238,8 @@ public partial class MenuMismaEscena : NetworkBehaviour
     {
         if (EsConductor())
         {
-            // El tutorial del conductor todavia no existe (sera independiente del pescador)
-            Debug.Log("[TUTORIAL] Tutorial del conductor pendiente.");
+            // Independiente del pescador: los paneles van en la tablet (MenuMismaEscena.TutorialConductor.cs)
+            AbrirTutorialConductorLocal();
             return;
         }
 
@@ -928,6 +1255,12 @@ public partial class MenuMismaEscena : NetworkBehaviour
 
     private void AbrirTutorialLocal()
     {
+        partidaLocalEnCurso = false;
+
+        // PRIMERO la plataforma y el pescador fuera del bote: al activar panelTutorial,
+        // TutorialSlidesUI ya reposiciona al jugador (y debe hacerlo sobre la plataforma)
+        SetTutorialPescador(true);
+
         SetPantallaPescadorServidor(PantallaPescador.Tutorial);
         AjustarVolumenMusica(volumenJuego);
         OcultarPanelTablero();
@@ -961,6 +1294,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
     private void CerrarPanelTutorialLocal()
     {
         if (panelTutorial != null) panelTutorial.SetActive(false);
+        SetTutorialPescador(false); // de vuelta al bote (antes de reposicionarlo en la cubierta)
         ResetearPosicionesOriginales();
         MarcarTutorialCompletadoLocal();
         MostrarMenuLocal();
@@ -1018,11 +1352,16 @@ public partial class MenuMismaEscena : NetworkBehaviour
 
     private void MostrarMenuLocal()
     {
+        partidaLocalEnCurso = false;
+
         if (EsConductor())
         {
             MostrarMenuConductorLocal();
             return;
         }
+
+        // Cualquier salida al menu termina el tutorial del pescador (vuelve al bote)
+        if (enTutorialPescador) SetTutorialPescador(false);
 
         SetPantallaPescadorServidor(PantallaPescador.Menu);
         AjustarVolumenMusica(volumenMenu);
@@ -1081,9 +1420,12 @@ public partial class MenuMismaEscena : NetworkBehaviour
         if (canvasGameHUD != null) canvasGameHUD.SetActive(false);
         if (canvasGameOverConductor != null) canvasGameOverConductor.SetActive(false);
 
+        CerrarTutorialConductorUI(); // si venia de su tutorial, avisa a la PC que termino
+
         if (canvasMenuConductor != null) canvasMenuConductor.SetActive(true);
         if (panelMenuConductor != null) panelMenuConductor.SetActive(true);
         if (panelEsperaConductor != null) panelEsperaConductor.SetActive(false);
+        ActualizarBotonJugarConductor(); // Jugar solo con su tutorial completado
 
         ApagarJugador();
 
@@ -1133,6 +1475,8 @@ public partial class MenuMismaEscena : NetworkBehaviour
 
     private void MostrarGameOverLocal()
     {
+        partidaLocalEnCurso = false;
+
         AjustarVolumenMusica(volumenMenu);
         OcultarPanelTablero();
 
@@ -1310,9 +1654,11 @@ public partial class MenuMismaEscena : NetworkBehaviour
         if (boteObjeto != null)
         {
             SetBoteVisible(false);
-            SetMovimientoBote(false);
+            // En los tutoriales el bote es del conductor: no se le quita el movimiento
+            if (!enTutorialPescador && !EnTutorialConductor) SetMovimientoBote(false);
         }
         ResetearPosicionesOriginales();
+        SalirModoPescaJugadores(); // si estaba con la cana equipada, vuelve normal
         if (rodObjeto != null) rodObjeto.SetActive(false);
         GarantizarJugador();
         ThirdPController[] players = FindObjectsOfType<ThirdPController>();
@@ -1320,6 +1666,61 @@ public partial class MenuMismaEscena : NetworkBehaviour
         {
             if (p != null) p.enabled = false;
         }
+
+        FijarVistaMenuPescador();
+    }
+
+    /// <summary>Guarda (una sola vez, con los valores de la escena) la rotacion local de las
+    /// camaras y del modelo del pescador.</summary>
+    private void GuardarVistaMenuPescador()
+    {
+        if (vistaMenuHijos != null) return;
+        GarantizarJugador();
+        if (playerController == null) return;
+
+        var hijos = new System.Collections.Generic.List<Transform>();
+        foreach (Camera cam in playerController.GetComponentsInChildren<Camera>(true))
+        {
+            if (cam != null && !hijos.Contains(cam.transform)) hijos.Add(cam.transform);
+        }
+
+        Animator anim = playerController.GetComponentInChildren<Animator>(true);
+        if (anim != null && anim.transform != playerController.transform && !hijos.Contains(anim.transform))
+        {
+            hijos.Add(anim.transform);
+        }
+
+        vistaMenuHijos = hijos.ToArray();
+        vistaMenuRotHijos = new Quaternion[vistaMenuHijos.Length];
+        for (int i = 0; i < vistaMenuHijos.Length; i++) vistaMenuRotHijos[i] = vistaMenuHijos[i].localRotation;
+    }
+
+    /// <summary>
+    /// Pescador (PC y celular VR) viendo cualquier canvas: siempre la misma vista.
+    /// El jugador ya quedo en posicionInicialPescador (ResetearPosicionesOriginales); aqui se
+    /// deshace el giro que haya quedado de la partida (Z/X, yaw del celular) y se apaga el
+    /// CharacterController para que nada lo mueva mientras se ve el menu. Al empezar a jugar,
+    /// el OnEnable del ThirdPController lo vuelve a encender.
+    /// </summary>
+    private void FijarVistaMenuPescador()
+    {
+        if (EsConductor()) return;
+        GarantizarJugador();
+        if (playerController == null) return;
+
+        GuardarVistaMenuPescador();
+        if (vistaMenuHijos != null)
+        {
+            for (int i = 0; i < vistaMenuHijos.Length; i++)
+            {
+                if (vistaMenuHijos[i] != null) vistaMenuHijos[i].localRotation = vistaMenuRotHijos[i];
+            }
+        }
+
+        CharacterController cc = playerController.GetComponent<CharacterController>();
+        if (cc != null) cc.enabled = false;
+
+        Physics.SyncTransforms();
     }
 
     private void GuardarPosicionesIniciales()
@@ -1335,6 +1736,8 @@ public partial class MenuMismaEscena : NetworkBehaviour
         GarantizarJugador();
         if (playerController != null)
         {
+            if (padreOriginalJugador == null) padreOriginalJugador = playerController.transform.parent;
+
             // Guardamos la posición LOCAL exacta que le pusiste en el Inspector dentro del bote
             jugadorLocalPosInicial = playerController.transform.localPosition;
             jugadorLocalRotInicial = playerController.transform.localRotation;
@@ -1352,6 +1755,21 @@ public partial class MenuMismaEscena : NetworkBehaviour
     public void ResetearPosicionesOriginales()
     {
         GuardarPosicionesIniciales();
+
+        // En el tutorial del pescador NO se toca el bote (el conductor puede estar usandolo)
+        // y el pescador va a la plataforma en vez de a la cubierta
+        if (enTutorialPescador)
+        {
+            ColocarJugadorEnPlataforma();
+            return;
+        }
+
+        // En el tutorial del conductor el bote es suyo: el pescador espera fuera, frente a su menu
+        if (EnTutorialConductor)
+        {
+            ColocarPescadorEnPoseMenu();
+            return;
+        }
 
         if (boteObjeto != null)
         {
@@ -1383,12 +1801,7 @@ public partial class MenuMismaEscena : NetworkBehaviour
             playerController.transform.localRotation = Quaternion.identity;
 
             Physics.SyncTransforms();
-
-            var netTransform = playerController.GetComponent<Unity.Netcode.Components.NetworkTransform>();
-            if (netTransform != null && netTransform.IsSpawned && (netTransform.IsServer || netTransform.IsOwner))
-            {
-                netTransform.Teleport(playerController.transform.position, playerController.transform.rotation, playerController.transform.localScale);
-            }
+            TeleportRedJugador();
 
             if (cc != null && ConfigJugador.RolActual == TipoJugador.Jugador1_PescadorVR) 
             {
@@ -1611,7 +2024,22 @@ public partial class MenuMismaEscena : NetworkBehaviour
                 Cursor.lockState = CursorLockMode.Locked;
                 Cursor.visible = false;
             }
-            // En SLIDE el jugador queda apagado, igual que en el menu
+            else
+            {
+                // En SLIDE el jugador queda apagado y quieto, igual que en el primer slide y el menu.
+                // Al volver de una prueba el ThirdPController seguia encendido y su gravedad lo
+                // hacia caer desde posicionInicialPescador.
+                // Ademas sale del modo pesca: el siguiente slide/prueba empieza sin la cana equipada.
+                SalirModoPescaJugadores();
+                foreach (ThirdPController p in FindObjectsOfType<ThirdPController>())
+                {
+                    if (p != null) p.enabled = false;
+                }
+                FijarVistaMenuPescador();
+
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+            }
 
             Debug.Log($"[TUTORIAL][ESCENA] enPrueba={enPrueba} server={IsServer} jugador=" +
                       (playerController != null ? playerController.name + " enabled=" + playerController.enabled : "null"));
@@ -1645,11 +2073,32 @@ public partial class MenuMismaEscena : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// Desequipa la cana (y recoge el anzuelo) de los pescadores que controla este dispositivo
+    /// (la PC, o todos si no hay red). El celular VR se entera por red.
+    /// </summary>
+    private void SalirModoPescaJugadores()
+    {
+        foreach (ThirdPController p in FindObjectsOfType<ThirdPController>(true))
+        {
+            if (p != null && (!p.IsSpawned || p.IsOwner)) p.ForzarSalirModoPesca();
+        }
+    }
+
     private void SetBoteVisible(bool visible)
     {
         if (boteObjeto == null) return;
         foreach (var r in boteObjeto.GetComponentsInChildren<Renderer>(true))
             r.enabled = visible;
+
+        // El pescador (con su cana) era hijo del bote y se ocultaba con el. En el tutorial del
+        // pescador ya no es hijo: sin esto se quedaba con los renderers apagados (cana invisible).
+        GarantizarJugador();
+        if (playerController != null && !playerController.transform.IsChildOf(boteObjeto.transform))
+        {
+            foreach (var r in playerController.GetComponentsInChildren<Renderer>(true))
+                r.enabled = visible;
+        }
     }
 
     private ThirdPController ObtenerJugadorLocalReal()

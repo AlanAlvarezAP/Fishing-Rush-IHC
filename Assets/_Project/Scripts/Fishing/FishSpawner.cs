@@ -42,6 +42,16 @@ public class FishSpawner : NetworkBehaviour
     {
         if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening && !IsServer) return;
 
+        // Solo durante la partida (los 3 minutos). En el menu, el tutorial y el game over no
+        // aparece nada: el tutorial pone sus propios peces y tiburones.
+        if (menuCache == null) menuCache = FindObjectOfType<MenuMismaEscena>();
+        if (menuCache != null && !menuCache.PartidaEnCurso)
+        {
+            timer = spawnInterval; // al empezar la partida sale un pez de inmediato
+            tiburonesIniciados = false;
+            return;
+        }
+
         // --- Peces normales (los tiburones ya no cuentan para este maximo) ---
         timer += Time.deltaTime;
         if (timer >= spawnInterval)

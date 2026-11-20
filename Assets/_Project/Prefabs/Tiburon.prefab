@@ -1031,7 +1031,7 @@ MonoBehaviour:
   requiredSuccesses: 4
   showDebug: 0
   esTiburon: 1
-  segundosBloqueo: 8
+  segundosBloqueo: 5
   segundosPorPatron: 1
   segundosTambaleo: 3
   radioEmbestida: 35
