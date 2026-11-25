@@ -92,6 +92,23 @@ public class NetworkManagerUI : MonoBehaviour
         {
             UnlockCursor();
         }
+
+        RevisarReconexion();
+    }
+
+    /// <summary>
+    /// Respaldo: si el celular quedo sin conexion y sin ningun intento en marcha (algun fallo
+    /// en el que Netcode no aviso), se vuelve a intentar. Asi nunca se queda "muerto".
+    /// </summary>
+    private void RevisarReconexion()
+    {
+        if (!modoCliente || rutinaReconexion != null) return;
+
+        var nm = NetworkManager.Singleton;
+        if (nm == null || nm.IsServer || nm.ShutdownInProgress || nm.IsListening) return;
+
+        Debug.Log("[RED] Sin conexion y sin intento en curso: se reintenta.");
+        rutinaReconexion = StartCoroutine(ReconectarRutina());
     }
 
     private void StartServerMode()
@@ -112,9 +129,20 @@ public class NetworkManagerUI : MonoBehaviour
         }
 
         SetTransportAsClient();
-        NetworkManager.Singleton.StartClient();
+        bool inicio = NetworkManager.Singleton.StartClient();
         ShowGameHUD();
-        Debug.Log("[RED] Conectando como Cliente desde Celular.");
+
+        if (inicio)
+        {
+            Debug.Log("[RED] Conectando como Cliente desde Celular.");
+        }
+        else
+        {
+            // Ej. el wifi aun esta apagado: StartClient falla al instante y Netcode NO avisa
+            // con OnClientDisconnectCallback, asi que hay que volver a intentarlo desde aqui
+            Debug.LogWarning("[RED] No se pudo iniciar la conexion (sin red?). Se reintenta...");
+            if (rutinaReconexion == null) rutinaReconexion = StartCoroutine(ReconectarRutina());
+        }
     }
 
     private void OnDestroy()
